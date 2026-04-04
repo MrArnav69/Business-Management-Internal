@@ -31,7 +31,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
-import { formatNPR } from '@/lib/nepali-date'
+import { formatNPR, getCurrentBsDate, getCurrentAdDate, getCurrentTime } from '@/lib/nepali-date'
+import { UNITS } from '@/lib/constants'
 import { Plus, Search, Pencil, Trash2, Loader2, Eye } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -56,6 +57,7 @@ export default function ProductsPage() {
   const [formBrand, setFormBrand] = useState('')
   const [formVatPan, setFormVatPan] = useState(false)
   const [formStatus, setFormStatus] = useState<'active' | 'inactive'>('active')
+  const [formQuantity, setFormQuantity] = useState('0')
 
 
   
@@ -109,6 +111,7 @@ export default function ProductsPage() {
     setFormBrand('')
     setFormVatPan(false)
     setFormStatus('active')
+    setFormQuantity('0')
   }
 
   const openAddDialog = () => {
@@ -178,12 +181,48 @@ export default function ProductsPage() {
         toast.success('Product updated successfully')
       } else {
         const category = categories.find((c) => c.id === formCategoryId)
-        const count = (products.filter((p) => p.category_id === formCategoryId).length || 0) + 1
-        const productCode = `${category?.prefix || 'PRD'}-${String(count).padStart(4, '0')}`
-        const { error } = await supabase
+        const prefix = category?.prefix || 'PRD'
+        
+        const { data: latestProducts } = await supabase
           .from('products')
-          .insert({ ...payload, product_code: productCode, quantity: 0 } as any)
+          .select('product_code')
+          .ilike('product_code', `${prefix}-%`)
+          .order('created_at', { ascending: false })
+          .limit(1)
+
+        let newProductCode = `${prefix}-0001`
+        if (latestProducts && latestProducts.length > 0 && latestProducts[0].product_code) {
+           const lastCode = latestProducts[0].product_code
+           const num = parseInt(lastCode.replace(`${prefix}-`, ''), 10)
+           if (!isNaN(num)) {
+             newProductCode = `${prefix}-${String(num + 1).padStart(4, '0')}`
+           }
+        }
+
+        const initialQuantity = Number(formQuantity) || 0
+
+        const { data: insertedProduct, error } = await supabase
+          .from('products')
+          .insert({ ...payload, product_code: newProductCode, quantity: initialQuantity } as any)
+          .select()
+          .single()
+          
         if (error) throw error
+
+        if (initialQuantity > 0 && insertedProduct) {
+           await supabase.from('stock_history').insert({
+              product_id: insertedProduct.id,
+              quantity_change: initialQuantity,
+              quantity_after: initialQuantity,
+              type: 'in',
+              reference_type: 'manual',
+              reference_id: null,
+              date_bs: getCurrentBsDate(),
+              date_ad: getCurrentAdDate(),
+              time: getCurrentTime(),
+           } as any)
+        }
+
         toast.success('Product added successfully')
       }
       setDialogOpen(false)
@@ -202,7 +241,7 @@ export default function ProductsPage() {
     try {
       const { error } = await supabase
         .from('products')
-        .delete()
+        .update({ status: 'inactive' } as any)
         .eq('id', deletingProduct.id)
       if (error) throw error
       toast.success('Product deleted successfully')
@@ -393,13 +432,32 @@ export default function ProductsPage() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="product-unit">Unit</Label>
-              <Input
-                id="product-unit"
-                value={formUnit}
-                onChange={(e) => setFormUnit(e.target.value)}
-                placeholder="e.g. pcs, m, kg"
-              />
+              <Select value={formUnit} onValueChange={setFormUnit}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select unit" />
+                </SelectTrigger>
+                <SelectContent>
+                  {UNITS.map((u) => (
+                    <SelectItem key={u.abbreviation} value={u.abbreviation}>
+                      {u.name} ({u.abbreviation})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
+            {!editingProduct && (
+              <div className="space-y-2">
+                <Label htmlFor="product-qty">Initial Quantity</Label>
+                <Input
+                  id="product-qty"
+                  type="number"
+                  min="0"
+                  value={formQuantity}
+                  onChange={(e) => setFormQuantity(e.target.value)}
+                  placeholder="0"
+                />
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="product-buy-rate">Buy Rate</Label>
               <Input

@@ -23,10 +23,30 @@ import { toast } from 'sonner'
 export default function NewSupplierPage() {
   const router = useRouter()
   const [saving, setSaving] = useState(false)
-  const [supplierCode] = useState(() => {
-    const count = Math.floor(Math.random() * 9000) + 1000
-    return `SUP-${count}`
-  })
+  const [supplierCode, setSupplierCode] = useState('Generating...')
+
+  useEffect(() => {
+    const fetchLatestSupplierCode = async () => {
+      const { data, error } = await supabase
+        .from('suppliers')
+        .select('supplier_code')
+        .order('created_at', { ascending: false })
+        .limit(1)
+      
+      let nextCode = 'SUP-0001'
+      if (!error && data && data.length > 0 && data[0].supplier_code) {
+        const lastCode = data[0].supplier_code
+        if (lastCode.startsWith('SUP-')) {
+          const num = parseInt(lastCode.replace('SUP-', ''), 10)
+          if (!isNaN(num)) {
+            nextCode = `SUP-${String(num + 1).padStart(4, '0')}`
+          }
+        }
+      }
+      setSupplierCode(nextCode)
+    }
+    fetchLatestSupplierCode()
+  }, [])
   const [formName, setFormName] = useState('')
   const [formPhone, setFormPhone] = useState('')
   const [formPhoneCountry, setFormPhoneCountry] = useState('NP')
@@ -44,6 +64,10 @@ export default function NewSupplierPage() {
     e.preventDefault()
     if (!formName.trim()) {
       toast.error('Supplier name is required')
+      return
+    }
+    if (!formPhone.trim()) {
+      toast.error('Supplier phone is required')
       return
     }
     setSaving(true)
@@ -118,12 +142,13 @@ export default function NewSupplierPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="supplier-phone">Phone</Label>
+                <Label htmlFor="supplier-phone">Phone *</Label>
                 <Input
                   id="supplier-phone"
                   value={formPhone}
                   onChange={(e) => setFormPhone(e.target.value)}
                   placeholder="e.g. 9841234567"
+                  required
                 />
               </div>
               <div className="space-y-2">

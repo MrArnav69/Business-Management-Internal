@@ -10,7 +10,11 @@ export function adToBs(date: Date | string): string {
 }
 
 export function bsToAd(bsDate: string): Date {
-  const [year, month, day] = bsDate.split('/').map(Number)
+  const parts = bsDate.split(/[\/\-]/).map(Number)
+  if (parts.length < 3 || parts.some(isNaN)) {
+    throw new Error('Invalid BS Date format')
+  }
+  const [year, month, day] = parts
   const nepaliDate = new NepaliDate(year, month - 1, day)
   return nepaliDate.toJsDate()
 }

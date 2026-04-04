@@ -92,6 +92,10 @@ export default function SupplierDetailPage({ params }: { params: Promise<{ id: s
   }
 
   const totalOutstanding = bills.reduce(
+    (sum, bill) => sum + Number(bill.credit_amount || 0),
+    0
+  )
+  const totalPaid = bills.reduce(
     (sum, bill) => sum + Number(bill.debit_amount || 0),
     0
   )
@@ -119,13 +123,21 @@ export default function SupplierDetailPage({ params }: { params: Promise<{ id: s
         </Badge>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-5">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Total Billed</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-lg font-semibold">{formatNPR(totalBilled)}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Total Paid</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-lg font-semibold text-green-600">{formatNPR(totalPaid)}</p>
           </CardContent>
         </Card>
         <Card>

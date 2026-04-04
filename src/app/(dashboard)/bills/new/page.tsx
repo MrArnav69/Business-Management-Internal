@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import type { Supplier, Product, Category } from '@/types'
 import { VAT_RATE } from '@/lib/constants'
-import { getCurrentBsDate, getCurrentAdDate, getCurrentTime, formatNPR } from '@/lib/nepali-date'
+import { getCurrentBsDate, getCurrentAdDate, getCurrentTime, formatNPR, getNepaliYear, bsToAd, adToBs } from '@/lib/nepali-date'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -17,6 +17,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { NepaliDatePicker } from 'nepali-datepicker-reactjs'
+import 'nepali-datepicker-reactjs/dist/index.css'
 import {
   Dialog,
   DialogContent,
@@ -73,10 +75,30 @@ export default function NewBillPage() {
 
   const [selectedSupplierId, setSelectedSupplierId] = useState('')
   const [invoiceNo, setInvoiceNo] = useState('')
-  const [billCode] = useState(() => {
-    const num = Math.floor(Math.random() * 9000) + 1000
-    return `BILL-${num}`
-  })
+  const [billCode, setBillCode] = useState('Generating...')
+
+  useEffect(() => {
+    const fetchLatestBillCode = async () => {
+      const nepaliYear = getNepaliYear()
+      const { data, error } = await supabase
+        .from('supplier_bills')
+        .select('bill_code')
+        .ilike('bill_code', `BILL${nepaliYear}-%`)
+        .order('created_at', { ascending: false })
+        .limit(1)
+      
+      let nextCode = `BILL${nepaliYear}-0001`
+      if (!error && data && data.length > 0 && data[0].bill_code) {
+        const lastCode = data[0].bill_code
+        const num = parseInt(lastCode.replace(`BILL${nepaliYear}-`, ''), 10)
+        if (!isNaN(num)) {
+          nextCode = `BILL${nepaliYear}-${String(num + 1).padStart(4, '0')}`
+        }
+      }
+      setBillCode(nextCode)
+    }
+    fetchLatestBillCode()
+  }, [])
 
   const [billItems, setBillItems] = useState<BillItemRow[]>([])
   const [productSearchOpen, setProductSearchOpen] = useState(false)
@@ -95,8 +117,33 @@ export default function NewBillPage() {
   const [debitAmount, setDebitAmount] = useState('')
   const [creditAmount, setCreditAmount] = useState('')
 
-
+  const [formDateBs, setFormDateBs] = useState(getCurrentBsDate())
+  const [formDateAd, setFormDateAd] = useState(getCurrentAdDate())
   
+  const [discountPercent, setDiscountPercent] = useState('')
+  const [discountAmount, setDiscountAmount] = useState('')
+
+  const handleBsDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value
+    setFormDateBs(val)
+    try {
+      const adDate = bsToAd(val)
+      setFormDateAd(adDate.toISOString().split('T')[0])
+    } catch {
+      // Ignore conversion if incomplete string
+    }
+  }
+
+  const handleAdDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value
+    setFormDateAd(val)
+    try {
+      const bsDate = adToBs(val)
+      setFormDateBs(bsDate)
+    } catch {
+      // Ignore
+    }
+  }
 
   const fetchSuppliers = useCallback(async () => {
     const { data, error } = await supabase
@@ -175,14 +222,64 @@ export default function NewBillPage() {
   }
 
   const subtotal = billItems.reduce((sum, item) => sum + item.amount, 0)
-  const vatAmount = subtotal * VAT_RATE
-  const totalWithVat = subtotal + vatAmount
+  const dAmount = Number(discountAmount) || 0
+  const subtotalAfterDiscount = Math.max(0, subtotal - dAmount)
+  const vatAmount = subtotalAfterDiscount * VAT_RATE
+  const totalWithVat = subtotalAfterDiscount + vatAmount
   const debit = Number(debitAmount) || 0
-  const credit = Number(creditAmount) || totalWithVat
+  const credit = Number(creditAmount) || 0
+
+  useEffect(() => {
+    const debitNum = Number(debitAmount) || 0
+    setCreditAmount(String(totalWithVat - debitNum))
+  }, [totalWithVat])
+
+  useEffect(() => {
+    const p = Number(discountPercent) || 0
+    if (p > 0) {
+      setDiscountAmount(((subtotal * p) / 100).toFixed(2))
+    }
+  }, [subtotal])
+
+  const handleDiscountPercentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value
+    setDiscountPercent(val)
+    const p = Number(val) || 0
+    setDiscountAmount(((subtotal * p) / 100).toFixed(2))
+  }
+
+  const handleDiscountAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value
+    setDiscountAmount(val)
+    const a = Number(val) || 0
+    if (subtotal > 0) {
+      setDiscountPercent(((a / subtotal) * 100).toFixed(2))
+    } else {
+      setDiscountPercent('0')
+    }
+  }
+
+  const handleDebitChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value
+    setDebitAmount(val)
+    const debitNum = Number(val) || 0
+    setCreditAmount(String(totalWithVat - debitNum))
+  }
+
+  const handleCreditChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value
+    setCreditAmount(val)
+    const creditNum = Number(val) || 0
+    setDebitAmount(String(totalWithVat - creditNum))
+  }
 
   const handleAddSupplier = async () => {
     if (!newSupplier.name.trim()) {
       toast.error('Supplier name is required')
+      return
+    }
+    if (!newSupplier.phone.trim()) {
+      toast.error('Supplier phone is required')
       return
     }
     setSavingSupplier(true)
@@ -203,8 +300,8 @@ export default function NewBillPage() {
           bank_details: null,
           remarks: null,
           status: 'active',
-          date_bs: getCurrentBsDate(),
-          date_ad: getCurrentAdDate(),
+          date_bs: formDateBs,
+          date_ad: formDateAd,
           time: getCurrentTime(),
         } as any)
         .select()
@@ -238,14 +335,16 @@ export default function NewBillPage() {
         bill_code: billCode,
         supplier_id: selectedSupplierId,
         invoice_no: invoiceNo.trim() || null,
-        date_bs: getCurrentBsDate(),
-        date_ad: getCurrentAdDate(),
+        date_bs: formDateBs,
+        date_ad: formDateAd,
         time: getCurrentTime(),
         total_amount: subtotal,
+        discount_percent: Number(discountPercent) || 0,
+        discount_amount: Number(discountAmount) || 0,
         total_with_vat: totalWithVat,
         debit_amount: debit,
         credit_amount: credit,
-        status: credit >= totalWithVat ? ('paid' as const) : debit > 0 ? ('partial' as const) : ('pending' as const),
+        status: credit <= 0 ? ('paid' as const) : debit > 0 ? ('partial' as const) : ('pending' as const),
       }
 
       const { data: billData, error: billError } = await supabase
@@ -275,12 +374,13 @@ export default function NewBillPage() {
       if (itemsError) throw itemsError
 
       for (const item of billItems) {
-        try {
-          await supabase.rpc('increment_product_quantity', {
-            product_id: item.product_id,
-            quantity_change: item.quantity,
-          })
-        } catch {
+        const { error: rpcError } = await supabase.rpc('increment_product_quantity', {
+          product_id: item.product_id,
+          quantity_change: item.quantity,
+        })
+        
+        if (rpcError) {
+          console.warn('RPC failed, falling back to client-side update', rpcError)
           const { data: product } = await supabase
             .from('products')
             .select('quantity')
@@ -299,8 +399,9 @@ export default function NewBillPage() {
             type: 'in',
             reference_type: 'bill',
             reference_id: billId,
-            date_bs: getCurrentBsDate(),
-            date_ad: getCurrentAdDate(),
+            date_bs: formDateBs,
+            date_ad: formDateAd,
+            time: getCurrentTime(),
           } as any)
         }
       }
@@ -349,9 +450,44 @@ export default function NewBillPage() {
             <CardTitle>Bill Details</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>Bill Code</Label>
-              <Input value={billCode} disabled />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Date (BS) *</Label>
+                <div className="relative">
+                  <NepaliDatePicker
+                    inputClassName="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    value={formDateBs.replace(/\//g, '-')}
+                    onChange={(val: string) => {
+                      const slashedVal = val.replace(/-/g, '/')
+                      setFormDateBs(slashedVal)
+                      try {
+                        const adDate = bsToAd(slashedVal)
+                        setFormDateAd(adDate.toISOString().split('T')[0])
+                      } catch {
+                        // Ignore
+                    }}}
+                    options={{ calenderLocale: 'en', valueLocale: 'en' }}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Date (AD) *</Label>
+                <Input type="date" value={formDateAd} onChange={handleAdDateChange} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Bill Code</Label>
+                <Input value={billCode} disabled />
+              </div>
+              <div className="space-y-2">
+                <Label>Invoice Number (optional)</Label>
+                <Input
+                  value={invoiceNo}
+                  onChange={(e) => setInvoiceNo(e.target.value)}
+                  placeholder="Supplier invoice number"
+                />
+              </div>
             </div>
             <div className="space-y-2">
               <Label>Supplier</Label>
@@ -378,14 +514,6 @@ export default function NewBillPage() {
                 </Button>
               </div>
             </div>
-            <div className="space-y-2">
-              <Label>Invoice Number (optional)</Label>
-              <Input
-                value={invoiceNo}
-                onChange={(e) => setInvoiceNo(e.target.value)}
-                placeholder="Supplier invoice number"
-              />
-            </div>
           </CardContent>
         </Card>
 
@@ -394,12 +522,22 @@ export default function NewBillPage() {
             <CardTitle>Payment Details</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Discount (%)</Label>
+                <Input type="number" min="0" max="100" value={discountPercent} onChange={handleDiscountPercentChange} placeholder="0" />
+              </div>
+              <div className="space-y-2">
+                <Label>Discount Amt (NPR)</Label>
+                <Input type="number" min="0" value={discountAmount} onChange={handleDiscountAmountChange} placeholder="0.00" />
+              </div>
+            </div>
             <div className="space-y-2">
               <Label>Debit Amount (NPR)</Label>
               <Input
                 type="number"
                 value={debitAmount}
-                onChange={(e) => setDebitAmount(e.target.value)}
+                onChange={handleDebitChange}
                 placeholder="0.00"
               />
             </div>
@@ -408,7 +546,7 @@ export default function NewBillPage() {
               <Input
                 type="number"
                 value={creditAmount}
-                onChange={(e) => setCreditAmount(e.target.value)}
+                onChange={handleCreditChange}
                 placeholder={formatNPR(totalWithVat)}
               />
             </div>
@@ -417,6 +555,12 @@ export default function NewBillPage() {
                 <span>Subtotal</span>
                 <span>{formatNPR(subtotal)}</span>
               </div>
+              {Number(discountAmount) > 0 && (
+                <div className="flex justify-between text-red-500">
+                  <span>Discount</span>
+                  <span>-{formatNPR(Number(discountAmount))}</span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span>VAT ({(VAT_RATE * 100).toFixed(0)}%)</span>
                 <span>{formatNPR(vatAmount)}</span>
@@ -506,10 +650,12 @@ export default function NewBillPage() {
                       <Input
                         type="number"
                         min={1}
-                        value={item.quantity}
-                        onChange={(e) =>
-                          updateItemQuantity(item.product_id, Number(e.target.value) || 0)
-                        }
+                        value={item.quantity === 0 ? '' : item.quantity}
+                        onChange={(e) => {
+                          const val = e.target.value
+                          updateItemQuantity(item.product_id, val === '' ? 0 : Number(val))
+                        }}
+                        onFocus={(e) => e.target.select()}
                         className="w-20 text-right"
                       />
                     </TableCell>
@@ -519,10 +665,12 @@ export default function NewBillPage() {
                         type="number"
                         min={0}
                         step={0.01}
-                        value={item.buy_rate}
-                        onChange={(e) =>
-                          updateItemRate(item.product_id, Number(e.target.value) || 0)
-                        }
+                        value={item.buy_rate === 0 ? '' : item.buy_rate}
+                        onChange={(e) => {
+                          const val = e.target.value
+                          updateItemRate(item.product_id, val === '' ? 0 : Number(val))
+                        }}
+                        onFocus={(e) => e.target.select()}
                         className="w-28 text-right"
                       />
                     </TableCell>
@@ -556,6 +704,12 @@ export default function NewBillPage() {
                   <span className="text-muted-foreground">Subtotal</span>
                   <span>{formatNPR(subtotal)}</span>
                 </div>
+                {Number(discountAmount) > 0 && (
+                  <div className="flex justify-between text-red-500">
+                    <span className="text-muted-foreground text-red-400">Discount</span>
+                    <span>-{formatNPR(Number(discountAmount))}</span>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">VAT ({(VAT_RATE * 100).toFixed(0)}%)</span>
                   <span>{formatNPR(vatAmount)}</span>
@@ -601,7 +755,7 @@ export default function NewBillPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="ns-phone">Phone</Label>
+              <Label htmlFor="ns-phone">Phone *</Label>
               <Input
                 id="ns-phone"
                 value={newSupplier.phone}

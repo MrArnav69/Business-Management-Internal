@@ -65,6 +65,8 @@ CREATE TABLE supplier_bills (
   date_ad DATE NOT NULL,
   time TIME NOT NULL,
   total_amount DECIMAL(12,2) NOT NULL,
+  discount_percent DECIMAL(12,2) DEFAULT 0,
+  discount_amount DECIMAL(12,2) DEFAULT 0,
   total_with_vat DECIMAL(12,2) NOT NULL,
   debit_amount DECIMAL(12,2) NOT NULL,
   credit_amount DECIMAL(12,2) NOT NULL,

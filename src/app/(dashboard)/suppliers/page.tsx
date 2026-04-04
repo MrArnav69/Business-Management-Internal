@@ -117,6 +117,10 @@ export default function SuppliersPage() {
       toast.error('Supplier name is required')
       return
     }
+    if (!formPhone.trim()) {
+      toast.error('Supplier phone is required')
+      return
+    }
     setSaving(true)
     try {
       const payload = {
@@ -143,11 +147,26 @@ export default function SuppliersPage() {
         if (error) throw error
         toast.success('Supplier updated successfully')
       } else {
-        const count = suppliers.length + 1
-        const supplierCode = `SUP-${String(count).padStart(4, '0')}`
+        const { data: latestSupplier } = await supabase
+          .from('suppliers')
+          .select('supplier_code')
+          .order('created_at', { ascending: false })
+          .limit(1)
+
+        let newSupplierCode = 'SUP-0001'
+        if (latestSupplier && latestSupplier.length > 0 && latestSupplier[0].supplier_code) {
+           const lastCode = latestSupplier[0].supplier_code
+           if (lastCode.startsWith('SUP-')) {
+             const num = parseInt(lastCode.replace('SUP-', ''), 10)
+             if (!isNaN(num)) {
+               newSupplierCode = `SUP-${String(num + 1).padStart(4, '0')}`
+             }
+           }
+        }
+
         const { error } = await supabase
           .from('suppliers')
-          .insert({ ...payload, supplier_code: supplierCode } as any)
+          .insert({ ...payload, supplier_code: newSupplierCode } as any)
         if (error) throw error
         toast.success('Supplier added successfully')
       }
@@ -167,7 +186,7 @@ export default function SuppliersPage() {
     try {
       const { error } = await supabase
         .from('suppliers')
-        .delete()
+        .update({ status: 'inactive' } as any)
         .eq('id', deletingSupplier.id)
       if (error) throw error
       toast.success('Supplier deleted successfully')
@@ -315,12 +334,13 @@ export default function SuppliersPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="supplier-phone">Phone</Label>
+              <Label htmlFor="supplier-phone">Phone *</Label>
               <Input
                 id="supplier-phone"
                 value={formPhone}
                 onChange={(e) => setFormPhone(e.target.value)}
                 placeholder="e.g. 9841234567"
+                required
               />
             </div>
             <div className="space-y-2">
