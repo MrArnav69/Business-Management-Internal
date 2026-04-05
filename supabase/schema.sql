@@ -31,6 +31,9 @@ CREATE TABLE suppliers (
   bank_details TEXT,
   remarks TEXT,
   status TEXT DEFAULT 'active',
+  opening_balance DECIMAL(12,2) DEFAULT 0,
+  opening_balance_date_bs TEXT,
+  opening_balance_date_ad DATE,
   date_bs TEXT NOT NULL,
   date_ad DATE NOT NULL,
   time TIME NOT NULL,
@@ -96,6 +99,18 @@ CREATE TABLE price_history (
   sell_rate DECIMAL(12,2) NOT NULL,
   date_bs TEXT NOT NULL,
   date_ad DATE NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Supplier Payments
+CREATE TABLE supplier_payments (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  supplier_id UUID REFERENCES suppliers(id) ON DELETE CASCADE,
+  amount DECIMAL(12,2) NOT NULL,
+  date_bs TEXT NOT NULL,
+  date_ad DATE NOT NULL,
+  mode TEXT NOT NULL DEFAULT 'cash',
+  notes TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -180,6 +195,7 @@ CREATE POLICY "Allow all on supplier_bills" ON supplier_bills FOR ALL USING (tru
 CREATE POLICY "Allow all on bill_items" ON bill_items FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all on price_history" ON price_history FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all on stock_history" ON stock_history FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all on supplier_payments" ON supplier_payments FOR ALL USING (true) WITH CHECK (true);
 
 -- ==========================================
 -- Auto-update updated_at trigger

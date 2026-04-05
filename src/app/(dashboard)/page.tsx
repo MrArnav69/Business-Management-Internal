@@ -21,12 +21,12 @@ interface DashboardStats {
   totalProducts: number
   totalSuppliers: number
   lowStockCount: number
-  totalOutstanding: number
+  totalPayable: number
+  totalPaid: number
   recentBills: Array<{
     id: string
     bill_code: string
-    total_amount: number
-    debit_amount: number
+    total_with_vat: number
     date_bs: string
     supplier_name?: string
   }>
@@ -37,7 +37,8 @@ export default function DashboardPage() {
     totalProducts: 0,
     totalSuppliers: 0,
     lowStockCount: 0,
-    totalOutstanding: 0,
+    totalPayable: 0,
+    totalPaid: 0,
     recentBills: [],
   })
   const [loading, setLoading] = useState(true)
@@ -48,33 +49,41 @@ export default function DashboardPage() {
   useEffect(() => {
     async function fetchStats() {
       try {
-        const [productsRes, suppliersRes, lowStockRes, billsRes, recentBillsRes] = await Promise.all([
+        const [productsRes, suppliersRes, lowStockRes, billsSumRes, paymentsRes, recentBillsRes, suppliersBalancesRes] = await Promise.all([
           supabase.from('products').select('id', { count: 'exact', head: true }).eq('status', 'active'),
           supabase.from('suppliers').select('id', { count: 'exact', head: true }).eq('status', 'active'),
           supabase.from('products').select('id', { count: 'exact', head: true }).eq('status', 'active').lt('quantity', 10),
-          supabase.from('supplier_bills').select('debit_amount').eq('status', 'pending'),
+          supabase.from('supplier_bills').select('total_with_vat'),
+          supabase.from('supplier_payments').select('amount'),
           supabase
             .from('supplier_bills')
-            .select('id, bill_code, total_amount, debit_amount, date_bs, suppliers(name)')
+            .select('id, bill_code, total_with_vat, date_bs, suppliers(name)')
             .order('created_at', { ascending: false })
             .limit(10),
+          supabase.from('suppliers').select('opening_balance'),
         ])
 
-        const billsData = billsRes.data as any[]
+        const billsData = billsSumRes.data || []
+        const paymentsData = paymentsRes.data || []
+        const supplierData = suppliersBalancesRes.data || []
         const recentData = recentBillsRes.data as any[]
-        const totalOutstanding = (billsData || []).reduce((sum, bill) => sum + Number(bill.debit_amount), 0)
+
+        const totalOpeningBalance = supplierData.reduce((sum, s) => sum + Number(s.opening_balance || 0), 0)
+        const totalPurchases = billsData.reduce((sum, b) => sum + Number(b.total_with_vat || 0), 0)
+        const totalPaid = paymentsData.reduce((sum, p) => sum + Number(p.amount || 0), 0)
+        const totalPayable = totalOpeningBalance + totalPurchases - totalPaid
 
         setStats({
           totalProducts: productsRes.count || 0,
           totalSuppliers: suppliersRes.count || 0,
           lowStockCount: lowStockRes.count || 0,
-          totalOutstanding,
+          totalPayable,
+          totalPaid,
           recentBills:
             recentData?.map((bill: any) => ({
               id: bill.id,
               bill_code: bill.bill_code,
-              total_amount: Number(bill.total_amount),
-              debit_amount: Number(bill.debit_amount),
+              total_with_vat: Number(bill.total_with_vat || 0),
               date_bs: bill.date_bs,
               supplier_name: bill.suppliers?.name,
             })) || [],
@@ -91,16 +100,16 @@ export default function DashboardPage() {
 
   const metrics = [
     {
-      title: 'Total Products',
-      value: stats.totalProducts.toString(),
-      icon: Package,
-      color: 'text-blue-600',
-      bgColor: 'bg-blue-50',
+      title: 'Current Payables',
+      value: formatNPR(stats.totalPayable),
+      icon: TrendingUp,
+      color: 'text-red-600',
+      bgColor: 'bg-red-50',
     },
     {
-      title: 'Total Suppliers',
-      value: stats.totalSuppliers.toString(),
-      icon: Users,
+      title: 'Total Paid Out',
+      value: formatNPR(stats.totalPaid),
+      icon: TrendingUp,
       color: 'text-green-600',
       bgColor: 'bg-green-50',
     },
@@ -112,11 +121,11 @@ export default function DashboardPage() {
       bgColor: 'bg-amber-50',
     },
     {
-      title: 'Total Outstanding',
-      value: formatNPR(stats.totalOutstanding),
-      icon: TrendingUp,
-      color: 'text-red-600',
-      bgColor: 'bg-red-50',
+      title: 'Active Suppliers',
+      value: stats.totalSuppliers.toString(),
+      icon: Users,
+      color: 'text-blue-600',
+      bgColor: 'bg-blue-50',
     },
   ]
 
@@ -172,9 +181,9 @@ export default function DashboardPage() {
                       <p className="text-sm text-muted-foreground">{bill.supplier_name || 'Unknown'}</p>
                     </div>
                     <div className="text-right">
-                      <p className="font-medium">{formatNPR(bill.total_amount)}</p>
-                      <Badge variant={bill.debit_amount > 0 ? 'destructive' : 'secondary'}>
-                        {bill.debit_amount > 0 ? 'Pending' : 'Paid'}
+                      <p className="font-medium">{formatNPR(bill.total_with_vat)}</p>
+                      <Badge variant="outline">
+                        {bill.date_bs}
                       </Badge>
                     </div>
                   </div>

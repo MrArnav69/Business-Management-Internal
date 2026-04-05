@@ -16,7 +16,9 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { getCurrentBsDate, getCurrentAdDate, getCurrentTime } from '@/lib/nepali-date'
+import { getCurrentBsDate, getCurrentAdDate, getCurrentTime, bsToAd, adToBs } from '@/lib/nepali-date'
+import { NepaliDatePicker } from 'nepali-datepicker-reactjs'
+import 'nepali-datepicker-reactjs/dist/index.css'
 import { ArrowLeft, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -56,6 +58,31 @@ export default function NewSupplierPage() {
   const [formBankDetails, setFormBankDetails] = useState('')
   const [formRemarks, setFormRemarks] = useState('')
   const [formStatus, setFormStatus] = useState<'active' | 'inactive'>('active')
+  const [formOpeningBalance, setFormOpeningBalance] = useState('0')
+  const [formOpeningBalanceDateBs, setFormOpeningBalanceDateBs] = useState(getCurrentBsDate())
+  const [formOpeningBalanceDateAd, setFormOpeningBalanceDateAd] = useState(getCurrentAdDate())
+
+  const handleBsDateChange = (val: string) => {
+    const slashedVal = val.replace(/-/g, '/')
+    setFormOpeningBalanceDateBs(slashedVal)
+    try {
+      const adDate = bsToAd(slashedVal)
+      setFormOpeningBalanceDateAd(adDate.toISOString().split('T')[0])
+    } catch {
+      // Ignore
+    }
+  }
+
+  const handleAdDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value
+    setFormOpeningBalanceDateAd(val)
+    try {
+      const bsDate = adToBs(val)
+      setFormOpeningBalanceDateBs(bsDate)
+    } catch {
+      // Ignore
+    }
+  }
 
 
   
@@ -84,6 +111,9 @@ export default function NewSupplierPage() {
         bank_details: formBankDetails.trim() || null,
         remarks: formRemarks.trim() || null,
         status: formStatus,
+        opening_balance: Number(formOpeningBalance) || 0,
+        opening_balance_date_bs: formOpeningBalanceDateBs,
+        opening_balance_date_ad: formOpeningBalanceDateAd,
         date_bs: getCurrentBsDate(),
         date_ad: getCurrentAdDate(),
         time: getCurrentTime(),
@@ -193,6 +223,34 @@ export default function NewSupplierPage() {
                     <SelectItem value="inactive">Inactive</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="opening-balance">Opening Balance</Label>
+                <Input
+                  id="opening-balance"
+                  type="number"
+                  value={formOpeningBalance}
+                  onChange={(e) => setFormOpeningBalance(e.target.value)}
+                  placeholder="e.g. 1500.50"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Opening Balance Date (BS)</Label>
+                <NepaliDatePicker
+                  inputClassName="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  value={formOpeningBalanceDateBs.replace(/\//g, '-')}
+                  onChange={handleBsDateChange}
+                  options={{ calenderLocale: 'en', valueLocale: 'en' }}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="opening-balance-ad">Opening Balance Date (AD)</Label>
+                <Input
+                  id="opening-balance-ad"
+                  type="date"
+                  value={formOpeningBalanceDateAd}
+                  onChange={handleAdDateChange}
+                />
               </div>
               <div className="space-y-2 col-span-2">
                 <Label htmlFor="supplier-bank">Bank Details</Label>

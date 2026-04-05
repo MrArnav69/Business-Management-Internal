@@ -25,6 +25,9 @@ export interface Supplier {
   bank_details: string | null
   remarks: string | null
   status: 'active' | 'inactive'
+  opening_balance: number
+  opening_balance_date_bs: string | null
+  opening_balance_date_ad: string | null
   date_bs: string
   date_ad: string
   time: string
@@ -103,4 +106,15 @@ export interface StockHistory {
   date_ad: string
   created_at: string
   product?: Product
+}
+
+export interface SupplierPayment {
+  id: string
+  supplier_id: string
+  amount: number
+  date_bs: string
+  date_ad: string
+  mode: 'cash' | 'cheque'
+  notes: string | null
+  created_at: string
 }

@@ -114,9 +114,7 @@ export default function BillsPage() {
               <TableHead>Bill Code</TableHead>
               <TableHead>Supplier</TableHead>
               <TableHead>Date</TableHead>
-              <TableHead className="text-right">Total</TableHead>
-              <TableHead className="text-right">Debit</TableHead>
-              <TableHead className="text-right">Credit</TableHead>
+              <TableHead className="text-right">Total (inc. VAT)</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
@@ -140,13 +138,7 @@ export default function BillsPage() {
                   <TableCell className="font-mono text-sm">{bill.bill_code}</TableCell>
                   <TableCell className="font-medium">{bill.supplier_name}</TableCell>
                   <TableCell>{bill.date_bs}</TableCell>
-                  <TableCell className="text-right">{formatNPR(bill.total_amount)}</TableCell>
-                  <TableCell className="text-right">
-                    {Number(bill.debit_amount) > 0 ? formatNPR(bill.debit_amount) : '—'}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {Number(bill.credit_amount) > 0 ? formatNPR(bill.credit_amount) : '—'}
-                  </TableCell>
+                  <TableCell className="text-right">{formatNPR(bill.total_with_vat)}</TableCell>
                   <TableCell>
                     <Badge
                       variant={

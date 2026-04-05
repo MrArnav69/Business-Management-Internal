@@ -158,13 +158,9 @@ export default function BillDetailPage({ params }: { params: Promise<{ id: strin
               <span>Total</span>
               <span>{formatNPR(totalWithVat)}</span>
             </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Debit</span>
-              <span className="text-red-600">{formatNPR(bill.debit_amount)}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Credit</span>
-              <span className="text-green-600">{formatNPR(bill.credit_amount)}</span>
+            <div className="flex justify-between font-bold border-t pt-2">
+              <span>Total</span>
+              <span>{formatNPR(totalWithVat)}</span>
             </div>
           </CardContent>
         </Card>

@@ -55,7 +55,7 @@ export default function ProductsPage() {
   const [formBuyRate, setFormBuyRate] = useState('')
   const [formSellRate, setFormSellRate] = useState('')
   const [formBrand, setFormBrand] = useState('')
-  const [formVatPan, setFormVatPan] = useState(false)
+  const [formVatPan, setFormVatPan] = useState(true)
   const [formStatus, setFormStatus] = useState<'active' | 'inactive'>('active')
   const [formQuantity, setFormQuantity] = useState('0')
 
@@ -109,7 +109,7 @@ export default function ProductsPage() {
     setFormBuyRate('')
     setFormSellRate('')
     setFormBrand('')
-    setFormVatPan(false)
+    setFormVatPan(true)
     setFormStatus('active')
     setFormQuantity('0')
   }
@@ -486,6 +486,21 @@ export default function ProductsPage() {
                 onChange={(e) => setFormBrand(e.target.value)}
                 placeholder="e.g. Schneider"
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="product-vat">VAT / PAN</Label>
+              <Select
+                value={formVatPan ? 'yes' : 'no'}
+                onValueChange={(v) => setFormVatPan(v === 'yes')}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="yes">Yes (VAT applicable)</SelectItem>
+                  <SelectItem value="no">No</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="product-status">Status</Label>

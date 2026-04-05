@@ -33,6 +33,9 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Plus, Search, Pencil, Trash2, Loader2, Eye } from 'lucide-react'
 import { toast } from 'sonner'
+import { NepaliDatePicker } from 'nepali-datepicker-reactjs'
+import 'nepali-datepicker-reactjs/dist/index.css'
+import { getCurrentBsDate, getCurrentAdDate, bsToAd, adToBs } from '@/lib/nepali-date'
 
 export default function SuppliersPage() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
@@ -54,6 +57,20 @@ export default function SuppliersPage() {
   const [formBankDetails, setFormBankDetails] = useState('')
   const [formRemarks, setFormRemarks] = useState('')
   const [formStatus, setFormStatus] = useState<'active' | 'inactive'>('active')
+  const [formOpeningBalance, setFormOpeningBalance] = useState('0')
+  const [formObDateBs, setFormObDateBs] = useState(getCurrentBsDate())
+  const [formObDateAd, setFormObDateAd] = useState(getCurrentAdDate())
+
+  const handleObBsChange = (val: string) => {
+    const slash = val.replace(/-/g, '/')
+    setFormObDateBs(slash)
+    try { setFormObDateAd(bsToAd(slash).toISOString().split('T')[0]) } catch {}
+  }
+  const handleObAdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value
+    setFormObDateAd(val)
+    try { setFormObDateBs(adToBs(val)) } catch {}
+  }
 
   const fetchSuppliers = useCallback(async () => {
     try {
@@ -85,6 +102,9 @@ export default function SuppliersPage() {
     setFormBankDetails('')
     setFormRemarks('')
     setFormStatus('active')
+    setFormOpeningBalance('0')
+    setFormObDateBs(getCurrentBsDate())
+    setFormObDateAd(getCurrentAdDate())
   }
 
   const openAddDialog = () => {
@@ -104,6 +124,9 @@ export default function SuppliersPage() {
     setFormBankDetails(supplier.bank_details || '')
     setFormRemarks(supplier.remarks || '')
     setFormStatus(supplier.status)
+    setFormOpeningBalance(String(supplier.opening_balance || 0))
+    setFormObDateBs(supplier.opening_balance_date_bs || getCurrentBsDate())
+    setFormObDateAd(supplier.opening_balance_date_ad || getCurrentAdDate())
     setDialogOpen(true)
   }
 
@@ -134,6 +157,9 @@ export default function SuppliersPage() {
         bank_details: formBankDetails.trim() || null,
         remarks: formRemarks.trim() || null,
         status: formStatus,
+        opening_balance: Number(formOpeningBalance) || 0,
+        opening_balance_date_bs: formObDateBs || null,
+        opening_balance_date_ad: formObDateAd || null,
         date_bs: new Date().toISOString().split('T')[0],
         date_ad: new Date().toISOString().split('T')[0],
         time: new Date().toTimeString().split(' ')[0],
@@ -385,6 +411,35 @@ export default function SuppliersPage() {
                   <SelectItem value="inactive">Inactive</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="supplier-ob">Opening Balance (NPR)</Label>
+              <Input
+                id="supplier-ob"
+                type="number"
+                min="0"
+                value={formOpeningBalance}
+                onChange={(e) => setFormOpeningBalance(e.target.value)}
+                placeholder="0.00"
+              />
+            </div>
+            <div className="space-y-2 col-span-2">
+              <Label className="text-xs text-muted-foreground">Opening Balance Date</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-xs mb-1 block">BS Date</Label>
+                  <NepaliDatePicker
+                    inputClassName="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    value={formObDateBs.replace(/\//g, '-')}
+                    onChange={handleObBsChange}
+                    options={{ calenderLocale: 'en', valueLocale: 'en' }}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs mb-1 block">AD Date</Label>
+                  <Input type="date" value={formObDateAd} onChange={handleObAdChange} />
+                </div>
+              </div>
             </div>
           </div>
           <DialogFooter>

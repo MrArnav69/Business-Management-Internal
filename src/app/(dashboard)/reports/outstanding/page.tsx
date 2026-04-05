@@ -40,11 +40,11 @@ export default function OutstandingReportPage() {
   const fetchData = useCallback(async () => {
     try {
       const [suppliersRes, billsRes] = await Promise.all([
-        db
+        supabase
           .from('suppliers')
           .select('*')
           .order('name', { ascending: true }),
-        db
+        supabase
           .from('supplier_bills')
           .select('*')
           .order('created_at', { ascending: false }),
@@ -63,7 +63,7 @@ export default function OutstandingReportPage() {
           0
         )
         const totalPaid = supplierBills.reduce(
-          (sum, b) => sum + Number(b.credit_amount || 0),
+          (sum, b) => sum + Number(b.debit_amount || 0),
           0
         )
         const pendingBills = supplierBills.filter((b) => b.status === 'pending').length
