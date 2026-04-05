@@ -225,17 +225,17 @@ function NewBillContent() {
     Promise.all([fetchSuppliers(), fetchProducts(), fetchCategories()]).finally(() => setLoading(false))
   }, [fetchSuppliers, fetchProducts, fetchCategories])
 
-  const addProduct = (product: Product) => {
+  const addProduct = (product: Product, quantity: number = 1) => {
     setBillItems((prev) => [
       ...prev,
       {
         product_id: product.id,
         product_name: product.name,
         product_code: product.product_code,
-        quantity: 1,
+        quantity: quantity,
         unit: product.unit,
         buy_rate: product.buy_rate,
-        amount: product.buy_rate,
+        amount: product.buy_rate * quantity,
         vat_pan: product.vat_pan,
       },
     ])
@@ -279,11 +279,19 @@ function NewBillContent() {
       toast.success('Product created and added to bill!')
       await fetchProducts()
       // Auto-add the newly created product to bill items
+      const qty = Number(npQuantity) || 1
       setBillItems((prev) => [
         ...prev,
-        { product_id: inserted.id, product_name: inserted.name, product_code: inserted.product_code,
-          quantity: 1, unit: inserted.unit, buy_rate: inserted.buy_rate,
-          amount: inserted.buy_rate, vat_pan: inserted.vat_pan },
+        { 
+          product_id: inserted.id, 
+          product_name: inserted.name, 
+          product_code: inserted.product_code,
+          quantity: qty, 
+          unit: inserted.unit, 
+          buy_rate: inserted.buy_rate,
+          amount: inserted.buy_rate * qty, 
+          vat_pan: inserted.vat_pan 
+        },
       ])
       setShowNewProduct(false)
       resetNewProductForm()

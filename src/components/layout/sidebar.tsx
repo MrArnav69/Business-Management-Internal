@@ -21,6 +21,7 @@ import {
   AlertTriangle,
   Percent,
   UserCog,
+  Plus,
 } from 'lucide-react'
 import { useState } from 'react'
 
@@ -57,11 +58,24 @@ const navGroups: NavGroup[] = [
     items: [{ label: 'Suppliers', href: '/suppliers', icon: <Users className="h-4 w-4" /> }],
   },
   {
-    label: 'Bills',
+    label: 'Purchases',
     icon: <FileText className="h-4 w-4" />,
     items: [
-      { label: 'Supplier Bills', href: '/bills', icon: <ScrollText className="h-4 w-4" /> },
+      { label: 'Purchasing Bills', href: '/bills', icon: <ScrollText className="h-4 w-4" /> },
       { label: 'Bill History', href: '/bills/history', icon: <History className="h-4 w-4" /> },
+    ],
+  },
+  {
+    label: 'Customers',
+    icon: <Users className="h-4 w-4" />,
+    items: [{ label: 'Customers', href: '/customers', icon: <Users className="h-4 w-4" /> }],
+  },
+  {
+    label: 'Sales',
+    icon: <FileText className="h-4 w-4" />,
+    items: [
+      { label: 'Sales Bills', href: '/sales', icon: <ScrollText className="h-4 w-4" /> },
+      { label: 'New Sale', href: '/sales/new', icon: <Plus className="h-4 w-4" /> },
     ],
   },
   {
@@ -70,7 +84,9 @@ const navGroups: NavGroup[] = [
     items: [
       { label: 'Stock Report', href: '/reports/stock', icon: <Warehouse className="h-4 w-4" /> },
       { label: 'Supplier Ledger', href: '/reports/supplier-ledger', icon: <BookOpen className="h-4 w-4" /> },
-      { label: 'Outstanding', href: '/reports/outstanding', icon: <AlertTriangle className="h-4 w-4" /> },
+      { label: 'Customer Ledger', href: '/reports/customer-ledger', icon: <BookOpen className="h-4 w-4" /> },
+      { label: 'Payables (Suppliers)', href: '/reports/payables', icon: <AlertTriangle className="h-4 w-4" /> },
+      { label: 'Receivables (Customers)', href: '/reports/receivables', icon: <AlertTriangle className="h-4 w-4" /> },
     ],
   },
   {
@@ -89,7 +105,9 @@ export function Sidebar() {
     Dashboard: true,
     Inventory: true,
     Suppliers: true,
+    Customers: true,
     Bills: true,
+    Sales: true,
     Reports: true,
     Settings: true,
   })

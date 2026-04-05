@@ -35,6 +35,28 @@ export interface Supplier {
   updated_at: string
 }
 
+export interface Customer {
+  id: string
+  customer_code: string
+  name: string
+  phone: string | null
+  phone_country: string | null
+  phone_national: string | null
+  email: string | null
+  address: string | null
+  gst_pan_number: string | null
+  remarks: string | null
+  status: 'active' | 'inactive'
+  opening_balance: number
+  opening_balance_date_bs: string | null
+  opening_balance_date_ad: string | null
+  date_bs: string
+  date_ad: string
+  time: string
+  created_at: string
+  updated_at: string
+}
+
 export interface Product {
   id: string
   product_code: string
@@ -65,6 +87,19 @@ export interface BillItem {
   product?: Product
 }
 
+export interface CustomerBillItem {
+  id: string
+  bill_id: string
+  product_id: string
+  quantity: number
+  unit: string
+  sell_rate: number
+  amount: number
+  vat_pan: boolean
+  created_at: string
+  product?: Product
+}
+
 export interface SupplierBill {
   id: string
   bill_code: string
@@ -82,6 +117,25 @@ export interface SupplierBill {
   updated_at: string
   supplier?: Supplier
   items?: BillItem[]
+}
+
+export interface CustomerBill {
+  id: string
+  bill_code: string
+  customer_id: string
+  invoice_no: string | null
+  date_bs: string
+  date_ad: string
+  time: string
+  total_amount: number
+  total_with_vat: number
+  discount_amount: number
+  tax_amount: number
+  status: 'pending' | 'paid' | 'partial'
+  created_at: string
+  updated_at: string
+  customer?: Customer
+  items?: CustomerBillItem[]
 }
 
 export interface PriceHistory {
@@ -115,6 +169,17 @@ export interface SupplierPayment {
   date_bs: string
   date_ad: string
   mode: 'cash' | 'cheque'
+  notes: string | null
+  created_at: string
+}
+
+export interface CustomerPayment {
+  id: string
+  customer_id: string
+  amount: number
+  date_bs: string
+  date_ad: string
+  mode: 'cash' | 'cheque' | 'online'
   notes: string | null
   created_at: string
 }
