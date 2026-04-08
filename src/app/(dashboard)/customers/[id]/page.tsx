@@ -140,6 +140,12 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
       return
     }
 
+    const amount = Number(paymentAmount)
+    if (amount > balanceReceivable) {
+      toast.error(`Amount cannot exceed receivable balance (${formatNPR(balanceReceivable)})`)
+      return
+    }
+
     setIsSavingPayment(true)
     try {
       const { error } = await supabase.from('customer_payments').insert({
@@ -415,7 +421,12 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="amount">Amount Received (NPR) *</Label>
+              <div className="flex justify-between items-center">
+                <Label htmlFor="amount">Amount Received (NPR) *</Label>
+                <span className="text-sm text-muted-foreground">
+                  Max: {formatNPR(balanceReceivable)}
+                </span>
+              </div>
               <Input
                 id="amount"
                 type="number"
@@ -425,6 +436,9 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                 className="text-lg font-semibold"
                 autoFocus
               />
+              {Number(paymentAmount) > balanceReceivable && (
+                <p className="text-sm text-destructive">Amount exceeds receivable balance</p>
+              )}
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">

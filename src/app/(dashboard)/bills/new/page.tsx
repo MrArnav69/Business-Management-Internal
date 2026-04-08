@@ -260,22 +260,17 @@ function NewBillContent() {
         const num = parseInt(latest[0].product_code.replace(`${prefix}-`, ''), 10)
         if (!isNaN(num)) code = `${prefix}-${String(num + 1).padStart(4, '0')}`
       }
-      const initialQty = Number(npQuantity) || 0
+      // Note: Quantity is set to 0 because the bill save will increment it.
+      // This prevents double-counting where product creation adds quantity
+      // and bill save adds it again.
       const payload = {
         name: npName.trim(), category_id: npCategoryId, unit: npUnit,
         buy_rate: Number(npBuyRate), sell_rate: Number(npSellRate),
         brand: npBrand.trim() || null, vat_pan: npVatPan,
-        status: 'active', product_code: code, quantity: initialQty,
+        status: 'active', product_code: code, quantity: 0,
       }
       const { data: inserted, error } = await supabase.from('products').insert(payload as any).select().single()
       if (error) throw error
-      if (initialQty > 0 && inserted) {
-        await supabase.from('stock_history').insert({
-          product_id: inserted.id, quantity_change: initialQty, quantity_after: initialQty,
-          type: 'in', reference_type: 'manual', reference_id: null,
-          date_bs: getCurrentBsDate(), date_ad: getCurrentAdDate(), time: getCurrentTime(),
-        } as any)
-      }
       toast.success('Product created and added to bill!')
       await fetchProducts()
       // Auto-add the newly created product to bill items
