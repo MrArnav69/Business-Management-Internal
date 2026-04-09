@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
+import { recalculateCustomerStatuses } from '@/lib/status-calculator'
 import type { Customer, Product, CustomerBillItem, Category } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -84,6 +85,7 @@ function SalesNewContent() {
   const [manualTotal, setManualTotal] = useState('')
   const [discountPercent, setDiscountPercent] = useState('0')
   const [discountAmount, setDiscountAmount] = useState('0')
+  const [transportationAmount, setTransportationAmount] = useState('0')
   const [billItems, setBillItems] = useState<(Partial<CustomerBillItem> & { product_name?: string, product_code?: string })[]>([])
   const [productSearch, setProductSearch] = useState('')
   const [productSearchOpen, setProductSearchOpen] = useState(false)
@@ -222,6 +224,7 @@ function SalesNewContent() {
         quantity: quantity,
         unit: product.unit,
         sell_rate: product.sell_rate,
+        discount_percent: 0,
         amount: product.sell_rate * quantity,
         vat_pan: product.vat_pan,
       },
@@ -233,8 +236,11 @@ function SalesNewContent() {
   const updateItem = (index: number, updates: Partial<CustomerBillItem>) => {
     const newItems = [...billItems]
     newItems[index] = { ...newItems[index], ...updates }
-    if (updates.quantity !== undefined || updates.sell_rate !== undefined) {
-      newItems[index].amount = (newItems[index].quantity || 0) * (newItems[index].sell_rate || 0)
+    if (updates.quantity !== undefined || updates.sell_rate !== undefined || updates.discount_percent !== undefined) {
+      const qty = newItems[index].quantity || 0
+      const rate = newItems[index].sell_rate || 0
+      const disc = newItems[index].discount_percent || 0
+      newItems[index].amount = qty * rate * (1 - disc / 100)
     }
     setBillItems(newItems)
   }
@@ -249,9 +255,10 @@ function SalesNewContent() {
   const totalDiscount = discountFromPercent + Number(discountAmount)
   const taxableAmount = currentSubtotal - totalDiscount
   const vatAmount = isManualMode ? 0 : taxableAmount * VAT_RATE
-  const totalWithVat = taxableAmount + vatAmount
+  const transportation = Number(transportationAmount) || 0
+  const totalWithVat = taxableAmount + vatAmount + transportation
 
-  const handleSaveSale = async () => {
+  const handleSaveSale = async (isEstimate: boolean = false) => {
     if (!selectedCustomerId) {
       toast.error('Please select a customer')
       return
@@ -272,8 +279,9 @@ function SalesNewContent() {
         time: getCurrentTime(),
         total_amount: currentSubtotal,
         discount_amount: totalDiscount,
-        tax_amount: vatAmount,
-        total_with_vat: totalWithVat,
+        tax_amount: isEstimate ? 0 : vatAmount,
+        transportation_amount: transportation,
+        total_with_vat: isEstimate ? (taxableAmount + transportation) : totalWithVat,
         status: 'pending',
       }
 
@@ -294,6 +302,7 @@ function SalesNewContent() {
           quantity: item.quantity,
           unit: item.unit,
           sell_rate: item.sell_rate,
+          discount_percent: Number(item.discount_percent) || 0,
           amount: item.amount,
           vat_pan: item.vat_pan,
         }))
@@ -333,8 +342,10 @@ function SalesNewContent() {
         }
       }
 
-      toast.success('Sale bill saved successfully')
-      router.push(`/sales/${saleId}`)
+      await recalculateCustomerStatuses(selectedCustomerId)
+
+      toast.success(isEstimate ? 'Estimate saved' : 'Sale bill saved successfully')
+      router.push(`/sales/${saleId}${isEstimate ? '?print=estimate' : ''}`)
     } catch (error) {
       console.error('Error saving sale:', error)
       toast.error('Failed to save sale bill')
@@ -350,6 +361,35 @@ function SalesNewContent() {
     }
     setSavingCustomer(true)
     try {
+      // Check for duplicate phone
+      if (newCustomer.phone.trim()) {
+        const { data: existingPhone } = await supabase
+          .from('customers')
+          .select('id')
+          .eq('phone', newCustomer.phone.trim())
+          .limit(1)
+
+        if (existingPhone && existingPhone.length > 0) {
+          toast.error('A customer with this phone number already exists!')
+          setSavingCustomer(false)
+          return
+        }
+      }
+
+      // Check for duplicate PAN if provided
+      if (newCustomer.pan.trim()) {
+        const { data: existingPan } = await supabase
+          .from('customers')
+          .select('id')
+          .eq('gst_pan_number', newCustomer.pan.trim())
+          .limit(1)
+
+        if (existingPan && existingPan.length > 0) {
+          toast.error('A customer with this PAN number already exists!')
+          setSavingCustomer(false)
+          return
+        }
+      }
       const { data: latest } = await supabase.from('customers').select('customer_code').order('created_at', { ascending: false }).limit(1)
       let nextCode = 'CUST-0001'
       if (latest && latest.length > 0) {
@@ -397,8 +437,8 @@ function SalesNewContent() {
   }
 
   const handleAddNewProduct = async () => {
-    if (!npName || !npCategoryId || !npUnit || !npBuyRate || !npSellRate) {
-      toast.error('Please fill all required fields')
+    if (!npName || !npCategoryId || !npUnit || !npSellRate) {
+      toast.error('Please fill all required fields (Name, Category, Unit, Sell Rate)')
       return
     }
 
@@ -555,6 +595,11 @@ function SalesNewContent() {
                 <Input type="number" value={discountAmount} onChange={(e) => setDiscountAmount(e.target.value)} className="font-medium" />
               </div>
             </div>
+            
+            <div className="space-y-2">
+              <Label className="text-muted-foreground text-xs uppercase font-bold tracking-wider">Transportation/Labour (NPR)</Label>
+              <Input type="number" value={transportationAmount} onChange={(e) => setTransportationAmount(e.target.value)} className="font-medium" placeholder="0" />
+            </div>
 
             <div className="rounded-xl border bg-muted/30 p-4 space-y-3 shadow-inner">
               <div className="flex justify-between text-sm items-center">
@@ -571,6 +616,12 @@ function SalesNewContent() {
                 <span className="text-muted-foreground font-medium">VAT (13%)</span>
                 <span className="font-bold text-base">{formatNPR(vatAmount)}</span>
               </div>
+              {Number(transportationAmount) > 0 && (
+                <div className="flex justify-between text-sm items-center">
+                  <span className="text-muted-foreground font-medium">Transportation</span>
+                  <span className="font-bold text-base">{formatNPR(Number(transportationAmount))}</span>
+                </div>
+              )}
               <div className="pt-2 border-t flex justify-between items-end">
                 <div>
                   <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-tighter">Grand Total Payable</p>
@@ -665,11 +716,12 @@ function SalesNewContent() {
                 <TableHeader className="bg-muted/50">
                   <TableRow>
                     <TableHead className="font-bold">Product Name</TableHead>
-                    <TableHead className="w-[120px] font-bold">Qty</TableHead>
-                    <TableHead className="w-[100px] font-bold">Unit</TableHead>
-                    <TableHead className="w-[160px] font-bold">Sell Rate</TableHead>
-                    <TableHead className="text-right w-[180px] font-bold">Total Amount</TableHead>
-                    <TableHead className="w-[80px]"></TableHead>
+                    <TableHead className="w-[100px] font-bold">Qty</TableHead>
+                    <TableHead className="w-[80px] font-bold">Unit</TableHead>
+                    <TableHead className="w-[120px] font-bold">Sell Rate</TableHead>
+                    <TableHead className="w-[90px] text-right font-bold">Disc %</TableHead>
+                    <TableHead className="text-right w-[140px] font-bold">Amount</TableHead>
+                    <TableHead className="w-[60px]"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -709,6 +761,19 @@ function SalesNewContent() {
                             />
                           </div>
                         </TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={100}
+                            step={0.1}
+                            value={item.discount_percent === 0 ? '' : item.discount_percent}
+                            onChange={(e) => updateItem(index, { discount_percent: e.target.value === '' ? 0 : Number(e.target.value) })}
+                            className="h-9 text-right font-medium focus:ring-primary"
+                            placeholder="0"
+                            onFocus={(e) => e.target.select()}
+                          />
+                        </TableCell>
                         <TableCell className="text-right font-black text-slate-900">{formatNPR(item.amount || 0)}</TableCell>
                         <TableCell>
                           <Button variant="ghost" size="icon" onClick={() => removeItem(index)} className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive">
@@ -730,9 +795,13 @@ function SalesNewContent() {
         <Link href="/sales">
           <Button variant="outline" className="px-8 h-11">Cancel</Button>
         </Link>
-        <Button onClick={handleSaveSale} disabled={saving} size="lg" className="px-16 h-12 text-lg font-black shadow-xl ring-2 ring-primary/20 ring-offset-2 transition-all hover:scale-105 active:scale-95">
+        <Button onClick={() => handleSaveSale(true)} disabled={saving} variant="outline" size="lg" className="h-12 px-8 font-bold border-violet-300 text-violet-700 hover:bg-violet-50 transition-all hover:scale-105 active:scale-95">
+          {saving ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : null}
+          Save & Print Estimate
+        </Button>
+        <Button onClick={() => handleSaveSale(false)} disabled={saving} size="lg" className="px-16 h-12 text-lg font-black shadow-xl ring-2 ring-primary/20 ring-offset-2 transition-all hover:scale-105 active:scale-95">
           {saving ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <PackageCheck className="mr-2 h-5 w-5" />}
-          POST BILL
+          {isManualMode ? 'POST MANUAL BILL' : 'POST BILL'}
         </Button>
       </div>
 
@@ -835,13 +904,15 @@ function SalesNewContent() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label>Buy Rate (Cost) *</Label>
-              <Input type="number" value={npBuyRate} onChange={(e) => setNpBuyRate(e.target.value)} placeholder="0.00" />
-            </div>
-            <div className="space-y-2">
-              <Label>Sell Rate (Retail) *</Label>
-              <Input type="number" value={npSellRate} onChange={(e) => setNpSellRate(e.target.value)} placeholder="0.00" />
+            <div className="grid grid-cols-2 gap-4 col-span-2">
+              <div className="grid gap-2">
+                <Label>Buy Rate (Optional)</Label>
+                <Input type="number" value={npBuyRate} onChange={(e) => setNpBuyRate(e.target.value)} placeholder="0.00" />
+              </div>
+              <div className="grid gap-2">
+                <Label>Sell Rate *</Label>
+                <Input type="number" value={npSellRate} onChange={(e) => setNpSellRate(e.target.value)} placeholder="0.00" />
+              </div>
             </div>
             <div className="space-y-2">
               <Label>Initial Quantity</Label>

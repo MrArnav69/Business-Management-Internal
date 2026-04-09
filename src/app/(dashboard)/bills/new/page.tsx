@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
+import { recalculateSupplierStatuses } from '@/lib/status-calculator'
 import type { Supplier, Product, Category } from '@/types'
 import { VAT_RATE, UNITS } from '@/lib/constants'
 import { getCurrentBsDate, getCurrentAdDate, getCurrentTime, formatNPR, getNepaliYear, bsToAd, adToBs } from '@/lib/nepali-date'
@@ -44,9 +45,11 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
-import { ArrowLeft, Plus, Trash2, Loader2, Check, PackageCheck, PackagePlus, UserPlus, Search } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2, Loader2, Check, PackageCheck, PackagePlus, UserPlus, Search, ScanLine } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { AiScanDialog } from '@/components/ai-scan-dialog'
+import type { ScannedBillData } from '@/lib/gemini'
 
 interface BillItemRow {
   product_id: string
@@ -55,6 +58,7 @@ interface BillItemRow {
   quantity: number
   unit: string
   buy_rate: number
+  discount_percent: number
   amount: number
   vat_pan: boolean
 }
@@ -111,6 +115,8 @@ function NewBillContent() {
   const [productSearch, setProductSearch] = useState('')
   const [manualTotal, setManualTotal] = useState('')
   const [isManualMode, setIsManualMode] = useState(false)
+  const [showAiScan, setShowAiScan] = useState(false)
+  const [scanImageDataUrl, setScanImageDataUrl] = useState<string | null>(null)
 
   const [showNewSupplier, setShowNewSupplier] = useState(false)
   const [newSupplier, setNewSupplier] = useState<NewSupplierForm>({
@@ -168,6 +174,7 @@ function NewBillContent() {
   
   const [discountPercent, setDiscountPercent] = useState('')
   const [discountAmount, setDiscountAmount] = useState('')
+  const [transportationAmount, setTransportationAmount] = useState('0')
 
   const handleBsDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value
@@ -226,7 +233,8 @@ function NewBillContent() {
     Promise.all([fetchSuppliers(), fetchProducts(), fetchCategories()]).finally(() => setLoading(false))
   }, [fetchSuppliers, fetchProducts, fetchCategories])
 
-  const addProduct = (product: Product, quantity: number = 1) => {
+  const addProduct = (product: Product, quantity: number = 1, discountPercent: number = 0) => {
+    const effectiveRate = product.buy_rate * (1 - discountPercent / 100)
     setBillItems((prev) => [
       ...prev,
       {
@@ -236,7 +244,8 @@ function NewBillContent() {
         quantity: quantity,
         unit: product.unit,
         buy_rate: product.buy_rate,
-        amount: product.buy_rate * quantity,
+        discount_percent: discountPercent,
+        amount: effectiveRate * quantity,
         vat_pan: product.vat_pan,
       },
     ])
@@ -249,7 +258,6 @@ function NewBillContent() {
     if (!npCategoryId) { toast.error('Category is required'); return }
     if (!npUnit) { toast.error('Unit is required'); return }
     if (!npBuyRate || isNaN(Number(npBuyRate))) { toast.error('Valid buy rate is required'); return }
-    if (!npSellRate || isNaN(Number(npSellRate))) { toast.error('Valid sell rate is required'); return }
     setSavingProduct(true)
     try {
       const category = categories.find((c: any) => c.id === npCategoryId)
@@ -285,6 +293,7 @@ function NewBillContent() {
           quantity: qty, 
           unit: inserted.unit, 
           buy_rate: inserted.buy_rate,
+          discount_percent: 0,
           amount: inserted.buy_rate * qty, 
           vat_pan: inserted.vat_pan 
         },
@@ -303,11 +312,15 @@ function NewBillContent() {
     setBillItems((prev) => prev.filter((item) => item.product_id !== productId))
   }
 
+  const recalcAmount = (qty: number, rate: number, disc: number) => {
+    return qty * rate * (1 - disc / 100)
+  }
+
   const updateItemQuantity = (productId: string, quantity: number) => {
     setBillItems((prev) =>
       prev.map((item) =>
         item.product_id === productId
-          ? { ...item, quantity, amount: quantity * item.buy_rate }
+          ? { ...item, quantity, amount: recalcAmount(quantity, item.buy_rate, item.discount_percent) }
           : item
       )
     )
@@ -317,10 +330,136 @@ function NewBillContent() {
     setBillItems((prev) =>
       prev.map((item) =>
         item.product_id === productId
-          ? { ...item, buy_rate, amount: item.quantity * buy_rate }
+          ? { ...item, buy_rate, amount: recalcAmount(item.quantity, buy_rate, item.discount_percent) }
           : item
       )
     )
+  }
+
+  const updateItemDiscount = (productId: string, discount_percent: number) => {
+    setBillItems((prev) =>
+      prev.map((item) =>
+        item.product_id === productId
+          ? { ...item, discount_percent, amount: recalcAmount(item.quantity, item.buy_rate, discount_percent) }
+          : item
+      )
+    )
+  }
+
+  // AI Scan handler - process extracted data and pre-fill the form
+  const handleScanComplete = async (data: ScannedBillData, imageDataUrl: string) => {
+    setScanImageDataUrl(imageDataUrl)
+
+    // Set invoice number
+    if (data.invoice_no) setInvoiceNo(data.invoice_no)
+
+    // Set dates
+    if (data.date_bs) {
+      setFormDateBs(data.date_bs)
+      try {
+        const adDate = bsToAd(data.date_bs)
+        setFormDateAd(adDate.toISOString().split('T')[0])
+      } catch {}
+    } else if (data.date_ad) {
+      setFormDateAd(data.date_ad)
+      try {
+        setFormDateBs(adToBs(data.date_ad))
+      } catch {}
+    }
+
+    // Process items — match or create products
+    const newBillItems: BillItemRow[] = []
+    for (const scannedItem of data.items) {
+      // Try to find matching product
+      const matchedProduct = products.find(p => {
+        const pName = p.name.toLowerCase().trim()
+        const sName = scannedItem.name.toLowerCase().trim()
+        return pName === sName || pName.includes(sName) || sName.includes(pName)
+      })
+
+      if (matchedProduct) {
+        newBillItems.push({
+          product_id: matchedProduct.id,
+          product_name: matchedProduct.name,
+          product_code: matchedProduct.product_code,
+          quantity: scannedItem.quantity,
+          unit: matchedProduct.unit,
+          buy_rate: scannedItem.buy_rate,
+          discount_percent: scannedItem.discount_percent || 0,
+          amount: scannedItem.amount,
+          vat_pan: matchedProduct.vat_pan,
+        })
+      } else {
+        // Auto-create the product
+        try {
+          const catPrefix = scannedItem.category_prefix || 'HDW'
+          const category = categories.find(c => (c as any).prefix === catPrefix) || categories[0]
+          const prefix = (category as any)?.prefix || 'PRD'
+
+          const { data: latest } = await supabase.from('products').select('product_code')
+            .ilike('product_code', `${prefix}-%`).order('created_at', { ascending: false }).limit(1)
+          let code = `${prefix}-0001`
+          if (latest && latest.length > 0) {
+            const num = parseInt(latest[0].product_code.replace(`${prefix}-`, ''), 10)
+            if (!isNaN(num)) code = `${prefix}-${String(num + 1).padStart(4, '0')}`
+          }
+
+          const unitMatch = scannedItem.unit?.toLowerCase() || 'pcs'
+
+          const { data: inserted, error } = await supabase.from('products').insert({
+            name: scannedItem.name.trim(),
+            category_id: category?.id || categories[0]?.id,
+            unit: unitMatch,
+            buy_rate: scannedItem.buy_rate,
+            sell_rate: 0,
+            brand: null,
+            vat_pan: true,
+            status: 'active',
+            product_code: code,
+            quantity: 0,
+          } as any).select().single()
+
+          if (error) {
+            console.error('Failed to create product:', scannedItem.name, error)
+            toast.error(`Failed to create product: ${scannedItem.name}`)
+            continue
+          }
+
+          toast.success(`Product created: ${code} — ${scannedItem.name}`)
+
+          newBillItems.push({
+            product_id: inserted.id,
+            product_name: inserted.name,
+            product_code: inserted.product_code,
+            quantity: scannedItem.quantity,
+            unit: inserted.unit,
+            buy_rate: scannedItem.buy_rate,
+            discount_percent: scannedItem.discount_percent || 0,
+            amount: scannedItem.amount,
+            vat_pan: true,
+          })
+        } catch (err) {
+          console.error('Error creating product:', err)
+          toast.error(`Error creating product: ${scannedItem.name}`)
+        }
+      }
+    }
+
+    setBillItems(newBillItems)
+    await fetchProducts() // Refresh products list
+
+    // Set discount if bill-level
+    if (data.discount_amount > 0) {
+      setDiscountAmount(String(data.discount_amount))
+    }
+
+    // Set transportation if extracted
+    if (data.transportation_amount > 0) {
+      setTransportationAmount(String(data.transportation_amount))
+    }
+
+    setIsManualMode(false)
+    toast.success(`AI extracted ${newBillItems.length} items from the bill!`)
   }
 
   // Replaced computed isManualMode with dedicated state
@@ -332,7 +471,8 @@ function NewBillContent() {
   const displaySubtotal = isManualMode ? Number(manualTotal) : subtotal
   const subtotalAfterDiscount = Math.max(0, displaySubtotal - dAmount)
   const vatAmount = isManualMode ? 0 : subtotalAfterDiscount * VAT_RATE
-  const totalWithVat = isManualMode ? Number(manualTotal) : (subtotalAfterDiscount + vatAmount)
+  const transAmount = Number(transportationAmount) || 0
+  const totalWithVat = (isManualMode ? Number(manualTotal) : (subtotalAfterDiscount + vatAmount)) + transAmount
 
 
 
@@ -374,6 +514,33 @@ function NewBillContent() {
     }
     setSavingSupplier(true)
     try {
+      // Check for duplicate phone
+      const { data: existingPhone } = await supabase
+        .from('suppliers')
+        .select('id')
+        .eq('phone', newSupplier.phone.trim())
+        .limit(1)
+
+      if (existingPhone && existingPhone.length > 0) {
+        toast.error('A supplier with this phone number already exists!')
+        setSavingSupplier(false)
+        return
+      }
+
+      // Check for duplicate GST/PAN if provided
+      if (newSupplier.gst_pan.trim()) {
+        const { data: existingPan } = await supabase
+          .from('suppliers')
+          .select('id')
+          .eq('gst_pan_number', newSupplier.gst_pan.trim())
+          .limit(1)
+
+        if (existingPan && existingPan.length > 0) {
+          toast.error('A supplier with this GST/PAN number already exists!')
+          setSavingSupplier(false)
+          return
+        }
+      }
       // Fetch latest supplier code for unique generation
       const { data: latestSupplier } = await supabase
         .from('suppliers')
@@ -462,13 +629,15 @@ function NewBillContent() {
         date_bs: formDateBs,
         date_ad: formDateAd,
         time: getCurrentTime(),
-        total_amount: isManualMode ? Number(manualTotal) : subtotal,
+        total_amount: displaySubtotal,
         discount_percent: Number(discountPercent) || 0,
         discount_amount: Number(discountAmount) || 0,
         total_with_vat: totalWithVat,
-        debit_amount: 0,
-        credit_amount: totalWithVat,
+        transportation_amount: transAmount,
+        debit_amount: totalWithVat,
+        credit_amount: 0,
         status: 'pending' as const,
+        scan_image_url: scanImageDataUrl || null,
       }
 
       const { data: billData, error: billError } = await supabase
@@ -532,6 +701,8 @@ function NewBillContent() {
         }
       }
 
+      await recalculateSupplierStatuses(selectedSupplierId)
+
       toast.success('Bill saved successfully')
       router.push(`/bills/${billId}`)
     } catch (error) {
@@ -564,10 +735,18 @@ function NewBillContent() {
             <ArrowLeft className="h-4 w-4" />
           </Button>
         </Link>
-        <div>
+        <div className="flex-1">
           <h1 className="text-2xl font-bold tracking-tight">New Purchase Bill</h1>
           <p className="text-muted-foreground">Create a new bill from supplier</p>
         </div>
+        <Button
+          variant="outline"
+          onClick={() => setShowAiScan(true)}
+          className="h-11 px-5 border-violet-300 hover:bg-violet-50 hover:border-violet-400 transition-all group"
+        >
+          <ScanLine className="mr-2 h-4 w-4 text-violet-600 group-hover:scale-110 transition-transform" />
+          <span className="bg-gradient-to-r from-violet-600 to-blue-600 bg-clip-text text-transparent font-bold">AI Scan</span>
+        </Button>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -652,6 +831,18 @@ function NewBillContent() {
                 <Input type="number" value={discountAmount} onChange={handleDiscountAmountChange} className="font-medium" />
               </div>
             </div>
+
+            <div className="space-y-2">
+              <Label className="text-muted-foreground text-xs uppercase font-bold tracking-wider">Transportation/Labour (NPR)</Label>
+              <Input 
+                type="number" 
+                value={transportationAmount} 
+                onChange={(e) => setTransportationAmount(e.target.value)} 
+                className="font-medium" 
+                placeholder="0" 
+              />
+            </div>
+
             <div className="rounded-xl border bg-muted/30 p-4 space-y-3 shadow-inner">
               <div className="flex justify-between text-sm items-center">
                 <span className="text-muted-foreground font-medium">Item Subtotal</span>
@@ -770,11 +961,12 @@ function NewBillContent() {
                     <TableHeader className="bg-muted/50">
                       <TableRow>
                         <TableHead className="font-bold">Product Name</TableHead>
-                        <TableHead className="w-[120px] font-bold">Qty</TableHead>
-                        <TableHead className="w-[100px] font-bold">Unit</TableHead>
+                        <TableHead className="w-[100px] font-bold">Qty</TableHead>
+                        <TableHead className="w-[80px] font-bold">Unit</TableHead>
                         <TableHead className="w-[120px] text-right font-bold">Buy Rate</TableHead>
+                        <TableHead className="w-[90px] text-right font-bold">Disc %</TableHead>
                         <TableHead className="w-[120px] text-right font-bold">Amount</TableHead>
-                        <TableHead className="w-[100px] font-bold">VAT</TableHead>
+                        <TableHead className="w-[80px] font-bold">VAT</TableHead>
                         <TableHead className="w-[50px]"></TableHead>
                       </TableRow>
                     </TableHeader>
@@ -808,6 +1000,22 @@ function NewBillContent() {
                               }}
                               onFocus={(e) => e.target.select()}
                               className="w-28 text-right h-8"
+                            />
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Input
+                              type="number"
+                              min={0}
+                              max={100}
+                              step={0.1}
+                              value={item.discount_percent === 0 ? '' : item.discount_percent}
+                              onChange={(e) => {
+                                const val = e.target.value
+                                updateItemDiscount(item.product_id, val === '' ? 0 : Number(val))
+                              }}
+                              onFocus={(e) => e.target.select()}
+                              className="w-20 text-right h-8"
+                              placeholder="0"
                             />
                           </TableCell>
                           <TableCell className="text-right font-medium">
@@ -851,6 +1059,12 @@ function NewBillContent() {
                       <span className="text-muted-foreground font-medium">VAT (13%)</span>
                       <span className="font-bold text-base">{formatNPR(vatAmount)}</span>
                     </div>
+                    {transAmount > 0 && (
+                      <div className="flex justify-between text-sm items-center">
+                        <span className="text-muted-foreground font-medium">Transportation</span>
+                        <span className="font-bold text-base">{formatNPR(transAmount)}</span>
+                      </div>
+                    )}
                     <div className="pt-2 border-t flex justify-between items-end">
                       <div>
                         <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-tighter">Grand Total</p>
@@ -1033,7 +1247,7 @@ function NewBillContent() {
               <Input id="np-buy-rate" type="number" value={npBuyRate} onChange={(e) => setNpBuyRate(e.target.value)} placeholder="0.00" />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="np-sell-rate">Sell Rate *</Label>
+              <Label htmlFor="np-sell-rate">Sell Rate (optional)</Label>
               <Input id="np-sell-rate" type="number" value={npSellRate} onChange={(e) => setNpSellRate(e.target.value)} placeholder="0.00" />
             </div>
             <div className="space-y-2">
@@ -1066,6 +1280,13 @@ function NewBillContent() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* AI Scan Dialog */}
+      <AiScanDialog
+        open={showAiScan}
+        onOpenChange={setShowAiScan}
+        onScanComplete={handleScanComplete}
+      />
     </div>
   )
 }

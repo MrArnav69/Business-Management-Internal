@@ -97,8 +97,36 @@ export default function NewSupplierPage() {
       toast.error('Supplier phone is required')
       return
     }
+
     setSaving(true)
     try {
+      // Check for duplicate phone
+      const { data: existingPhone } = await supabase
+        .from('suppliers')
+        .select('id')
+        .eq('phone', formPhone.trim())
+        .limit(1)
+
+      if (existingPhone && existingPhone.length > 0) {
+        toast.error('A supplier with this phone number already exists!')
+        setSaving(false)
+        return
+      }
+
+      // Check for duplicate GST/PAN if provided
+      if (formGstPan.trim()) {
+        const { data: existingPan } = await supabase
+          .from('suppliers')
+          .select('id')
+          .eq('gst_pan_number', formGstPan.trim())
+          .limit(1)
+
+        if (existingPan && existingPan.length > 0) {
+          toast.error('A supplier with this GST/PAN number already exists!')
+          setSaving(false)
+          return
+        }
+      }
       const payload = {
         supplier_code: supplierCode,
         name: formName.trim(),

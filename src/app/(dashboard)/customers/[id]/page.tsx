@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
+import { recalculateCustomerStatuses } from '@/lib/status-calculator'
 import type { Customer, CustomerBill, CustomerPayment } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -20,6 +21,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { formatNPR } from '@/lib/nepali-date'
 import { ArrowLeft, Loader2, Phone, Mail, MapPin, Plus, Receipt, History, Wallet, Coins } from 'lucide-react'
 import { toast } from 'sonner'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 import {
   Dialog,
   DialogContent,
@@ -41,6 +53,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { NepaliDatePicker } from 'nepali-datepicker-reactjs'
 import 'nepali-datepicker-reactjs/dist/index.css'
 import { getCurrentBsDate, getCurrentAdDate, bsToAd, adToBs } from '@/lib/nepali-date'
+import { deleteCustomerPayment } from '@/lib/bill-actions'
+import { Trash2 } from 'lucide-react'
 
 export default function CustomerDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter()
@@ -152,6 +166,8 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
       } as any)
 
       if (error) throw error
+
+      await recalculateCustomerStatuses(id)
 
       toast.success('Collection recorded successfully')
       setIsPaymentDialogOpen(false)
@@ -347,7 +363,18 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                         <TableCell>{bill.date_bs}</TableCell>
                         <TableCell className="text-right font-semibold">{formatNPR(bill.total_with_vat)}</TableCell>
                         <TableCell>
-                          <Badge variant="outline" className="capitalize">{bill.status}</Badge>
+                          <Badge 
+                            variant={
+                              bill.status === 'paid'
+                                ? 'default'
+                                : bill.status === 'partial'
+                                ? 'secondary'
+                                : 'destructive'
+                            }
+                            className="capitalize"
+                          >
+                            {bill.status}
+                          </Badge>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -391,8 +418,39 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                         <TableCell className="max-w-[200px] truncate text-muted-foreground italic">
                           {p.notes || '—'}
                         </TableCell>
-                        <TableCell className="text-right font-bold text-green-600">
-                          {formatNPR(p.amount)}
+                        <TableCell className="text-right flex justify-end gap-2">
+                          <AlertDialog>
+                            <AlertDialogTrigger className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-destructive bg-background text-destructive hover:bg-destructive/10 transition-colors" title="Delete Collection">
+                              <Trash2 className="h-4 w-4" />
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Delete Collection Record?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  This will remove this collection from the customer's history and un-pay any bills covered by this amount. This action cannot be undone.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction 
+                                  onClick={async () => {
+                                    const res = await deleteCustomerPayment(p.id, id)
+                                    if (res.error) toast.error(res.error)
+                                    else {
+                                      toast.success('Collection deleted')
+                                      window.location.reload()
+                                    }
+                                  }}
+                                  className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                                >
+                                  Delete Collection
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                          <span className="font-bold text-green-600">
+                            {formatNPR(p.amount)}
+                          </span>
                         </TableCell>
                       </TableRow>
                     ))}

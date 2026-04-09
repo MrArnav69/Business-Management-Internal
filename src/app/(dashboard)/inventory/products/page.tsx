@@ -151,12 +151,8 @@ export default function ProductsPage() {
       toast.error('Unit is required')
       return
     }
-    if (!formBuyRate || isNaN(Number(formBuyRate))) {
-      toast.error('Valid buy rate is required')
-      return
-    }
-    if (!formSellRate || isNaN(Number(formSellRate))) {
-      toast.error('Valid sell rate is required')
+    if (!Number(formBuyRate) && !Number(formSellRate)) {
+      toast.error('At least one rate (Buy or Sell) is required')
       return
     }
     setSaving(true)
@@ -465,7 +461,7 @@ export default function ProductsPage() {
               </div>
             )}
             <div className="space-y-2">
-              <Label htmlFor="product-buy-rate">Buy Rate</Label>
+              <Label htmlFor="product-buy-rate">Buy Rate (optional)</Label>
               <Input
                 id="product-buy-rate"
                 type="number"
@@ -475,7 +471,7 @@ export default function ProductsPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="product-sell-rate">Sell Rate</Label>
+              <Label htmlFor="product-sell-rate">Sell Rate (optional)</Label>
               <Input
                 id="product-sell-rate"
                 type="number"

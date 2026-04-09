@@ -92,6 +92,35 @@ export default function NewCustomerPage() {
     }
     setSaving(true)
     try {
+      // Check for duplicate phone
+      if (formPhone.trim()) {
+        const { data: existingPhone } = await supabase
+          .from('customers')
+          .select('id')
+          .eq('phone', formPhone.trim())
+          .limit(1)
+
+        if (existingPhone && existingPhone.length > 0) {
+          toast.error('A customer with this phone number already exists!')
+          setSaving(false)
+          return
+        }
+      }
+
+      // Check for duplicate PAN if provided
+      if (formGstPan.trim()) {
+        const { data: existingPan } = await supabase
+          .from('customers')
+          .select('id')
+          .eq('gst_pan_number', formGstPan.trim())
+          .limit(1)
+
+        if (existingPan && existingPan.length > 0) {
+          toast.error('A customer with this PAN number already exists!')
+          setSaving(false)
+          return
+        }
+      }
       const payload = {
         customer_code: customerCode,
         name: formName.trim(),

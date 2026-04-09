@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
+import { deleteSupplierBill } from '@/lib/bill-actions'
 import type { SupplierBill, BillItem } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -18,8 +19,19 @@ import {
 } from '@/components/ui/table'
 import { formatNPR } from '@/lib/nepali-date'
 import { VAT_RATE } from '@/lib/constants'
-import { ArrowLeft, Loader2, Printer } from 'lucide-react'
+import { ArrowLeft, Loader2, Printer, Trash2, Edit } from 'lucide-react'
 import { toast } from 'sonner'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 
 export default function BillDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter()
@@ -28,6 +40,10 @@ export default function BillDetailPage({ params }: { params: Promise<{ id: strin
   const [supplier, setSupplier] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [id, setId] = useState('')
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [discountPercent, setDiscountPercent] = useState('')
+  const [discountAmount, setDiscountAmount] = useState('')
+  const [transportationAmount, setTransportationAmount] = useState('0')
 
 
   
@@ -60,6 +76,8 @@ export default function BillDetailPage({ params }: { params: Promise<{ id: strin
             product_code: item.products?.product_code || '—',
           }))
         )
+        setDiscountAmount(billData.discount_amount?.toString() || '0')
+        setTransportationAmount(billData.transportation_amount?.toString() || '0')
       } catch (error) {
         console.error('Error fetching bill:', error)
         toast.error('Failed to load bill details')
@@ -87,6 +105,19 @@ export default function BillDetailPage({ params }: { params: Promise<{ id: strin
         </Link>
       </div>
     )
+  }
+
+  const handleDelete = async () => {
+    setIsDeleting(true)
+    try {
+      const res = await deleteSupplierBill(bill.id, bill.supplier_id)
+      if (res.error) throw new Error(res.error)
+      toast.success('Bill deleted successfully')
+      router.push('/bills')
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to delete bill')
+      setIsDeleting(false)
+    }
   }
 
   const subtotal = Number(bill.total_amount)
@@ -122,9 +153,35 @@ export default function BillDetailPage({ params }: { params: Promise<{ id: strin
           >
             {bill.status}
           </Badge>
-          <Button variant="outline" size="icon">
-            <Printer className="h-4 w-4" />
-          </Button>
+          {bill.scan_image_url && (
+            <Badge variant="outline" className="border-violet-300 text-violet-700 bg-violet-50 gap-1 text-sm items-center">
+              <span>🤖</span> AI Scanned
+            </Badge>
+          )}
+          <Link href={`/bills/${bill.id}/edit`}>
+            <Button variant="outline" size="icon" title="Edit Bill">
+              <Edit className="h-4 w-4" />
+            </Button>
+          </Link>
+          <AlertDialog>
+            <AlertDialogTrigger className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-destructive bg-background text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50" disabled={isDeleting} title="Delete Bill">
+              {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will completely delete this bill and revert the quantities of all stock received from your inventory. It will also alter the supplier's outstanding balances permanently.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={handleDelete} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
+                  Delete Bill
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       </div>
 
@@ -154,13 +211,15 @@ export default function BillDetailPage({ params }: { params: Promise<{ id: strin
               <span className="text-muted-foreground">VAT ({(VAT_RATE * 100).toFixed(0)}%)</span>
               <span>{formatNPR(vatAmount)}</span>
             </div>
-            <div className="flex justify-between font-bold border-t pt-2">
-              <span>Total</span>
-              <span>{formatNPR(totalWithVat)}</span>
-            </div>
-            <div className="flex justify-between font-bold border-t pt-2">
-              <span>Total</span>
-              <span>{formatNPR(totalWithVat)}</span>
+            {(bill.transportation_amount ?? 0) > 0 && (
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Transportation / Labour</span>
+                <span>{formatNPR(bill.transportation_amount ?? 0)}</span>
+              </div>
+            )}
+            <div className="flex justify-between font-bold border-t pt-2 text-primary">
+              <span className="uppercase text-xs tracking-wider">Grand Total</span>
+              <span className="text-lg">{formatNPR(totalWithVat)}</span>
             </div>
           </CardContent>
         </Card>
@@ -207,6 +266,25 @@ export default function BillDetailPage({ params }: { params: Promise<{ id: strin
           )}
         </CardContent>
       </Card>
+
+      {bill.scan_image_url && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <span>📷</span> Original Scanned Bill
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-xl overflow-hidden border bg-muted/30 p-2">
+              <img 
+                src={bill.scan_image_url} 
+                alt={`Scanned Bill ${bill.bill_code}`} 
+                className="w-full max-w-4xl mx-auto h-auto object-contain rounded-lg shadow-sm"
+              />
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }

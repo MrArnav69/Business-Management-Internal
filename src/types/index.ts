@@ -81,9 +81,12 @@ export interface BillItem {
   quantity: number
   unit: string
   buy_rate: number
+  discount_percent?: number
   amount: number
   vat_pan: boolean
   created_at: string
+  product_name?: string
+  product_code?: string
   product?: Product
 }
 
@@ -94,9 +97,12 @@ export interface CustomerBillItem {
   quantity: number
   unit: string
   sell_rate: number
+  discount_percent?: number
   amount: number
   vat_pan: boolean
   created_at: string
+  product_name?: string
+  product_code?: string
   product?: Product
 }
 
@@ -112,7 +118,9 @@ export interface SupplierBill {
   total_with_vat: number
   debit_amount: number
   credit_amount: number
+  transportation_amount?: number
   status: 'pending' | 'paid' | 'partial'
+  scan_image_url?: string | null
   created_at: string
   updated_at: string
   supplier?: Supplier
@@ -131,7 +139,9 @@ export interface CustomerBill {
   total_with_vat: number
   discount_amount: number
   tax_amount: number
+  transportation_amount?: number
   status: 'pending' | 'paid' | 'partial'
+  scan_image_url?: string | null
   created_at: string
   updated_at: string
   customer?: Customer
