@@ -37,13 +37,14 @@ import {
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Switch } from '@/components/ui/switch'
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
-import { ArrowLeft, Plus, Trash2, Loader2, Check, ChevronsUpDown } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2, Loader2, Check, PackageCheck, PackagePlus, UserPlus, Search } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
@@ -564,62 +565,61 @@ function NewBillContent() {
           </Button>
         </Link>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">New Supplier Bill</h1>
-          <p className="text-muted-foreground">Create a new bill for a supplier</p>
+          <h1 className="text-2xl font-bold tracking-tight">New Purchase Bill</h1>
+          <p className="text-muted-foreground">Create a new bill from supplier</p>
         </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Bill Details</CardTitle>
+        <Card className="shadow-md border-primary/10">
+          <CardHeader className="bg-primary/5 pb-4">
+            <CardTitle className="text-lg">Bill Details</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-4 pt-6">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Date (BS) *</Label>
-                <div className="relative">
-                  <NepaliDatePicker
-                    inputClassName="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                    value={formDateBs.replace(/\//g, '-')}
-                    onChange={(val: string) => {
-                      const slashedVal = val.replace(/-/g, '/')
-                      setFormDateBs(slashedVal)
-                      try {
-                        const adDate = bsToAd(slashedVal)
-                        setFormDateAd(adDate.toISOString().split('T')[0])
-                      } catch {
-                        // Ignore
-                    }}}
-                    options={{ calenderLocale: 'en', valueLocale: 'en' }}
-                  />
-                </div>
+                <Label className="text-muted-foreground text-xs uppercase font-bold tracking-wider">Date (BS)</Label>
+                <NepaliDatePicker
+                  inputClassName="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-all font-medium"
+                  value={formDateBs.replace(/\//g, '-')}
+                  onChange={(val: string) => {
+                    const slashedVal = val.replace(/-/g, '/')
+                    setFormDateBs(slashedVal)
+                    try {
+                      const adDate = bsToAd(slashedVal)
+                      setFormDateAd(adDate.toISOString().split('T')[0])
+                    } catch {
+                      // Ignore
+                  }}}
+                  options={{ calenderLocale: 'en', valueLocale: 'en' }}
+                />
               </div>
               <div className="space-y-2">
-                <Label>Date (AD) *</Label>
-                <Input type="date" value={formDateAd} onChange={handleAdDateChange} />
+                <Label className="text-muted-foreground text-xs uppercase font-bold tracking-wider">Date (AD)</Label>
+                <Input type="date" value={formDateAd} onChange={handleAdDateChange} className="font-medium" />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Bill Code</Label>
-                <Input value={billCode} disabled />
+                <Label className="text-muted-foreground text-xs uppercase font-bold tracking-wider">Bill Code</Label>
+                <Input value={billCode} disabled className="font-mono bg-muted font-bold" />
               </div>
               <div className="space-y-2">
-                <Label>Invoice Number (optional)</Label>
+                <Label className="text-muted-foreground text-xs uppercase font-bold tracking-wider">Ref / Invoice #</Label>
                 <Input
                   value={invoiceNo}
                   onChange={(e) => setInvoiceNo(e.target.value)}
-                  placeholder="Supplier invoice number"
+                  placeholder="Optional"
+                  className="font-medium"
                 />
               </div>
             </div>
             <div className="space-y-2">
-              <Label>Supplier</Label>
+              <Label className="text-muted-foreground text-xs uppercase font-bold tracking-wider">Supplier *</Label>
               <div className="flex gap-2">
                 <Select value={selectedSupplierId} onValueChange={setSelectedSupplierId}>
-                  <SelectTrigger className="flex-1">
-                    <SelectValue placeholder="Select supplier" />
+                  <SelectTrigger className="flex-1 font-medium">
+                    <SelectValue placeholder="Select Supplier" />
                   </SelectTrigger>
                   <SelectContent>
                     {suppliers.map((s) => (
@@ -629,153 +629,129 @@ function NewBillContent() {
                     ))}
                   </SelectContent>
                 </Select>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setShowNewSupplier(true)}
-                  title="Add new supplier"
-                >
-                  <Plus className="h-4 w-4" />
+                <Button variant="outline" size="icon" onClick={() => setShowNewSupplier(true)} title="Add new supplier">
+                  <UserPlus className="h-4 w-4 text-primary" />
                 </Button>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Bill Summary</CardTitle>
+        <Card className="shadow-md border-primary/10">
+          <CardHeader className="bg-primary/5 pb-4">
+            <CardTitle className="text-lg">Financial Summary</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-4 pt-6">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Discount (%)</Label>
-                <Input type="number" min="0" max="100" value={discountPercent} onChange={handleDiscountPercentChange} placeholder="0" />
+                <Label className="text-muted-foreground text-xs uppercase font-bold tracking-wider">Discount (%)</Label>
+                <Input type="number" value={discountPercent} onChange={handleDiscountPercentChange} className="font-medium" />
               </div>
               <div className="space-y-2">
-                <Label>Discount Amt (NPR)</Label>
-                <Input type="number" min="0" value={discountAmount} onChange={handleDiscountAmountChange} placeholder="0.00" />
+                <Label className="text-muted-foreground text-xs uppercase font-bold tracking-wider">Disc. Amt (NPR)</Label>
+                <Input type="number" value={discountAmount} onChange={handleDiscountAmountChange} className="font-medium" />
               </div>
             </div>
-            <div className="rounded-lg bg-muted p-3 space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span>Subtotal</span>
-                <span>{formatNPR(manualTotal ? Number(manualTotal) : subtotal)}</span>
+            <div className="rounded-xl border bg-muted/30 p-4 space-y-3 shadow-inner">
+              <div className="flex justify-between text-sm items-center">
+                <span className="text-muted-foreground font-medium">Item Subtotal</span>
+                <span className="font-bold text-base">{formatNPR(manualTotal ? Number(manualTotal) : subtotal)}</span>
               </div>
               {Number(discountAmount) > 0 && (
-                <div className="flex justify-between text-red-500">
-                  <span>Discount</span>
+                <div className="flex justify-between text-sm items-center text-green-600 font-semibold">
+                  <span>Total Discount</span>
                   <span>-{formatNPR(Number(discountAmount))}</span>
                 </div>
               )}
-              <div className="flex justify-between">
-                <span>VAT ({(VAT_RATE * 100).toFixed(0)}%)</span>
-                <span>{formatNPR(manualTotal ? 0 : vatAmount)}</span>
+              <div className="flex justify-between text-sm items-center">
+                <span className="text-muted-foreground font-medium">VAT (13%)</span>
+                <span className="font-bold text-base">{formatNPR(manualTotal ? 0 : vatAmount)}</span>
               </div>
-              <div className="flex justify-between font-semibold border-t pt-2">
-                <span>Total (Pending)</span>
-                <span>{formatNPR(manualTotal ? Number(manualTotal) : totalWithVat)}</span>
+              <div className="pt-2 border-t flex justify-between items-end">
+                <div>
+                  <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-tighter">Grand Total Payable</p>
+                  <p className="text-3xl font-black text-primary leading-none">{formatNPR(manualTotal ? Number(manualTotal) : totalWithVat)}</p>
+                </div>
+                <Badge variant="outline" className="bg-primary/10 border-primary/20 text-primary uppercase text-[10px] px-2 py-0.5">
+                  Pending Payment
+                </Badge>
               </div>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Bill will be saved as <strong>Pending</strong>. Use "Payment Out" on the supplier's profile to record payments.
-            </p>
           </CardContent>
         </Card>
       </div>
 
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between w-full">
-            <CardTitle>Bill Items</CardTitle>
-            <div className="flex items-center gap-6">
-              <div className="flex items-center gap-2 text-sm">
-                <span className={!isManualMode ? 'font-semibold' : 'text-muted-foreground'}>Itemized</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const newMode = !isManualMode
-                    setIsManualMode(newMode)
-                    if (newMode && (!manualTotal || manualTotal === '0')) {
-                      setManualTotal(String(totalWithVat || ''))
-                    }
-                  }}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isManualMode ? 'bg-primary' : 'bg-muted-foreground/30'}`}
-                >
-                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isManualMode ? 'translate-x-6' : 'translate-x-1'}`} />
-                </button>
-                <span className={isManualMode ? 'font-semibold' : 'text-muted-foreground'}>Quick Total</span>
-              </div>
-              {!isManualMode && (
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" onClick={() => { resetNewProductForm(); setShowNewProduct(true) }}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add New Product
-                  </Button>
-                  <Popover open={productSearchOpen} onOpenChange={setProductSearchOpen}>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" size="sm">
-                        <Plus className="mr-2 h-4 w-4" />
-                        Add Product
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[400px] p-0" align="start">
-                      <Command>
-                        <CommandInput
-                          placeholder="Search products..."
-                          value={productSearch}
-                          onValueChange={setProductSearch}
-                        />
-                        <CommandList>
-                          <CommandEmpty>No products found.</CommandEmpty>
-                          <CommandGroup>
-                            {filteredProducts.map((product) => (
-                              <CommandItem
-                                key={product.id}
-                                value={`${product.name} ${product.product_code}`}
-                                onSelect={() => addProduct(product)}
-                              >
-                                <Check
-                                  className={cn(
-                                    'mr-2 h-4 w-4',
-                                    billItems.find((i) => i.product_id === product.id)
-                                      ? 'opacity-100'
-                                      : 'opacity-0'
-                                  )}
-                                />
-                                <div className="flex-1">
-                                  <p className="font-medium">{product.name}</p>
-                                  <p className="text-xs text-muted-foreground">
-                                    {product.product_code} &middot; {formatNPR(product.buy_rate)}
-                                  </p>
-                                </div>
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
-                </div>
-              )}
+      <Card className="shadow-lg border-primary/5">
+        <CardHeader className="flex flex-row items-center justify-between border-b bg-muted/20 py-4">
+          <div className="flex items-center gap-4">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <PackageCheck className="h-5 w-5 text-primary" />
+              Bill Items
+            </CardTitle>
+            <div className="flex items-center bg-background rounded-full border p-1 scale-90">
+              <span className={cn("text-[10px] px-2 font-bold transition-all", !isManualMode ? "text-primary" : "text-muted-foreground")}>ITEMIZED</span>
+              <Switch checked={isManualMode} onCheckedChange={setIsManualMode} />
+              <span className={cn("text-[10px] px-2 font-bold transition-all", isManualMode ? "text-primary" : "text-muted-foreground")}>QUICK TOTAL</span>
             </div>
           </div>
+          {!isManualMode && (
+            <div className="flex gap-2">
+              <Popover open={productSearchOpen} onOpenChange={setProductSearchOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-9 border-primary/20 bg-background hover:bg-primary/5">
+                    <Search className="mr-2 h-4 w-4 text-primary" />
+                    Find Product
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[450px] p-0" align="end">
+                  <Command>
+                    <CommandInput placeholder="Type to search products..." value={productSearch} onValueChange={setProductSearch} />
+                    <CommandList>
+                      <CommandEmpty>No products found.</CommandEmpty>
+                      <CommandGroup heading="Available Inventory">
+                        {filteredProducts.map((p) => (
+                          <CommandItem key={p.id} onSelect={() => addProduct(p)} className="p-3 cursor-pointer">
+                            <div className="flex-1">
+                              <p className="font-bold">{p.name}</p>
+                              <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
+                                {p.product_code} · {p.category_name} · Stock: <span className="font-bold text-primary">{p.quantity} {p.unit}</span>
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <p className="font-black text-sm text-primary">{formatNPR(p.buy_rate)}</p>
+                              <p className="text-[9px] uppercase font-bold text-muted-foreground">Buy Rate</p>
+                            </div>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              <Button variant="secondary" size="sm" className="h-9 transition-all hover:scale-105" onClick={() => { resetNewProductForm(); setShowNewProduct(true) }}>
+                <PackagePlus className="mr-2 h-4 w-4" />
+                New Product
+              </Button>
+            </div>
+          )}
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-6">
           {isManualMode ? (
-            <div className="space-y-4 py-4 max-w-md mx-auto">
-              <div className="space-y-2">
-                <Label className="text-lg">Total Bill Amount (NPR) *</Label>
+            <div className="py-12 flex flex-col items-center justify-center space-y-6 max-w-lg mx-auto bg-primary/5 rounded-2xl border-2 border-dashed border-primary/20">
+              <div className="text-center space-y-1">
+                <h3 className="text-xl font-black text-primary uppercase italic">Quick Entry Mode</h3>
+                <p className="text-xs text-muted-foreground">Input the total bulk purchase amount directly</p>
+              </div>
+              <div className="w-full px-12">
+                <Label className="text-[10px] uppercase font-black text-muted-foreground mb-2 block text-center tracking-widest">Total Bulk Purchase Amount (NPR)</Label>
                 <Input
                   type="number"
-                  min="0"
                   value={manualTotal}
                   onChange={(e) => setManualTotal(e.target.value)}
-                  placeholder="Enter total amount including VAT"
-                  className="text-2xl h-14 font-bold text-center"
+                  className="text-4xl h-20 font-black text-center border-2 border-primary/30 focus-visible:ring-primary shadow-xl rounded-xl"
+                  placeholder="0.00"
                   autoFocus
                 />
-                <p className="text-xs text-muted-foreground text-center">VAT is assumed to be included in this manual total.</p>
               </div>
             </div>
           ) : (
@@ -784,22 +760,21 @@ function NewBillContent() {
                 <div className="text-center py-12 border-2 border-dashed rounded-lg space-y-3">
                   <p className="text-muted-foreground">No items added yet.</p>
                   <Button variant="outline" size="sm" onClick={() => setProductSearchOpen(true)}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Select a Product
+                    <Search className="mr-2 h-4 w-4" />
+                    Find Product
                   </Button>
                 </div>
               ) : (
-                <div className="rounded-md border">
+                <div className="overflow-x-auto rounded-lg border">
                   <Table>
-                    <TableHeader>
+                    <TableHeader className="bg-muted/50">
                       <TableRow>
-                        <TableHead>Product</TableHead>
-                        <TableHead>Code</TableHead>
-                        <TableHead className="text-right">Quantity</TableHead>
-                        <TableHead>Unit</TableHead>
-                        <TableHead className="text-right">Buy Rate</TableHead>
-                        <TableHead className="text-right">Amount</TableHead>
-                        <TableHead>VAT</TableHead>
+                        <TableHead className="font-bold">Product Name</TableHead>
+                        <TableHead className="w-[120px] font-bold">Qty</TableHead>
+                        <TableHead className="w-[100px] font-bold">Unit</TableHead>
+                        <TableHead className="w-[120px] text-right font-bold">Buy Rate</TableHead>
+                        <TableHead className="w-[120px] text-right font-bold">Amount</TableHead>
+                        <TableHead className="w-[100px] font-bold">VAT</TableHead>
                         <TableHead className="w-[50px]"></TableHead>
                       </TableRow>
                     </TableHeader>
@@ -807,7 +782,6 @@ function NewBillContent() {
                       {billItems.map((item) => (
                         <TableRow key={item.product_id}>
                           <TableCell className="font-medium">{item.product_name}</TableCell>
-                          <TableCell className="font-mono text-sm">{item.product_code}</TableCell>
                           <TableCell className="text-right">
                             <Input
                               type="number"
@@ -862,24 +836,26 @@ function NewBillContent() {
               )}
               {billItems.length > 0 && (
                 <div className="mt-6 flex justify-end">
-                  <div className="w-80 space-y-3 p-4 bg-muted/30 rounded-lg">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Item Subtotal</span>
-                      <span className="font-medium">{formatNPR(subtotal)}</span>
+                  <div className="w-80 space-y-3 p-4 bg-muted/30 rounded-xl border">
+                    <div className="flex justify-between text-sm items-center">
+                      <span className="text-muted-foreground font-medium">Item Subtotal</span>
+                      <span className="font-bold text-base">{formatNPR(subtotal)}</span>
                     </div>
                     {Number(discountAmount) > 0 && (
-                      <div className="flex justify-between text-sm text-destructive">
+                      <div className="flex justify-between text-sm items-center text-green-600 font-semibold">
                         <span>Total Discount</span>
                         <span>-{formatNPR(Number(discountAmount))}</span>
                       </div>
                     )}
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">VAT (13%)</span>
-                      <span className="font-medium">{formatNPR(vatAmount)}</span>
+                    <div className="flex justify-between text-sm items-center">
+                      <span className="text-muted-foreground font-medium">VAT (13%)</span>
+                      <span className="font-bold text-base">{formatNPR(vatAmount)}</span>
                     </div>
-                    <div className="flex justify-between text-lg font-bold border-t pt-3 text-primary">
-                      <span>Grand Total</span>
-                      <span>{formatNPR(totalWithVat)}</span>
+                    <div className="pt-2 border-t flex justify-between items-end">
+                      <div>
+                        <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-tighter">Grand Total</p>
+                        <p className="text-2xl font-black text-primary leading-none">{formatNPR(totalWithVat)}</p>
+                      </div>
                     </div>
                   </div>
                 </div>

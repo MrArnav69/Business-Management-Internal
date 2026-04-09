@@ -16,15 +16,7 @@ export function Header() {
             {todayAD} | BS: {todayBS}
           </p>
         </div>
-        <div className="flex items-center gap-4">
-          <div className="text-right">
-            <p className="text-sm font-medium">Admin</p>
-            <p className="text-xs text-muted-foreground">admin@retail.com</p>
-          </div>
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-medium">
-            A
-          </div>
-        </div>
+
       </div>
     </header>
   )

@@ -438,7 +438,7 @@ function SalesNewContent() {
       
       toast.success(`Product ${nextCode} created`)
       setProducts([...products, data])
-      addProductToBill(data, Number(npQuantity) || 1)
+      addProductToBill(data, 0)
       setShowNewProduct(false)
       // Reset form
       setNpName('')
@@ -478,7 +478,7 @@ function SalesNewContent() {
         </Link>
         <div>
           <h1 className="text-2xl font-bold tracking-tight">New Sale Bill</h1>
-          <p className="text-muted-foreground">High-fidelity customer billing entry</p>
+          <p className="text-muted-foreground">Create a new sale bill for customer</p>
         </div>
       </div>
 

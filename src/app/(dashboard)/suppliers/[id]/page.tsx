@@ -151,12 +151,6 @@ export default function SupplierDetailPage({ params }: { params: Promise<{ id: s
       return
     }
 
-    const amount = Number(paymentAmount)
-    if (amount > balanceOwed) {
-      toast.error(`Amount cannot exceed balance owed (${formatNPR(balanceOwed)})`)
-      return
-    }
-
     setIsSavingPayment(true)
     try {
       const { error } = await supabase.from('supplier_payments').insert({
@@ -441,12 +435,7 @@ export default function SupplierDetailPage({ params }: { params: Promise<{ id: s
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <div className="flex justify-between items-center">
-                <Label htmlFor="amount">Amount (NPR) *</Label>
-                <span className="text-sm text-muted-foreground">
-                  Max: {formatNPR(balanceOwed)}
-                </span>
-              </div>
+              <Label htmlFor="amount">Amount (NPR) *</Label>
               <Input
                 id="amount"
                 type="number"
@@ -456,9 +445,6 @@ export default function SupplierDetailPage({ params }: { params: Promise<{ id: s
                 className="text-lg font-semibold"
                 autoFocus
               />
-              {Number(paymentAmount) > balanceOwed && (
-                <p className="text-sm text-destructive">Amount exceeds balance owed</p>
-              )}
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">

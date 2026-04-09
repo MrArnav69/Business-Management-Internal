@@ -26,8 +26,17 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatNPR, getCurrentBsDate, getCurrentTime } from '@/lib/nepali-date'
-import { Loader2, TrendingUp, TrendingDown, FileDown, Table as TableIcon } from 'lucide-react'
+import { Loader2, FileDown, Table as TableIcon } from 'lucide-react'
 import { toast } from 'sonner'
+
+const BUSINESS_NAME = 'Nav Durga Electronics and Iron Stores'
+const BUSINESS_ADDRESS = 'Bandipur-2, Siraha, Nepal'
+
+function formatBalanceWithSuffix(balance: number): string {
+  const suffix = balance >= 0 ? 'Dr' : 'Cr'
+  const absBalance = Math.abs(balance)
+  return `${absBalance.toLocaleString('en-IN')} ${suffix}`
+}
 
 export default function CustomerLedgerPage() {
   return (
@@ -84,10 +93,10 @@ function CustomerLedgerContent() {
           supabase.from('customer_bills').select('*').eq('customer_id', selectedCustomerId).order('date_ad', { ascending: true }),
           supabase.from('customer_payments').select('*').eq('customer_id', selectedCustomerId).order('date_ad', { ascending: true })
         ])
-        
+
         if (billsRes.error) throw billsRes.error
         if (paymentsRes.error) throw paymentsRes.error
-        
+
         setBills(billsRes.data || [])
         setPayments(paymentsRes.data || [])
       } catch (error) {
@@ -101,123 +110,152 @@ function CustomerLedgerContent() {
   }, [selectedCustomerId])
 
   const openingBalance = Number(selectedCustomer?.opening_balance || 0)
-  
+
+  // For customer: Sale (bill) = Debit (customer owes us), Collection = Credit (decreases what they owe)
   const transactions = [
     ...bills.map(b => ({
       id: b.id,
       date_ad: b.date_ad,
       date_bs: b.date_bs,
       type: 'sale',
-      ref: b.bill_code,
-      increase: Number(b.total_with_vat || 0),
-      decrease: 0,
+      debit: Number(b.total_with_vat || 0),
+      credit: 0,
     })),
     ...payments.map(p => ({
       id: p.id,
       date_ad: p.date_ad,
       date_bs: p.date_bs,
       type: 'collection',
-      ref: `${p.mode.toUpperCase()}${p.notes ? ` - ${p.notes}` : ''}`,
-      increase: 0,
-      decrease: Number(p.amount || 0),
+      debit: 0,
+      credit: Number(p.amount || 0),
     }))
   ].sort((a, b) => new Date(a.date_ad).getTime() - new Date(b.date_ad).getTime())
 
+  // Running balance: positive = they owe us (Debit), negative = advance (Credit)
   let currentRunning = openingBalance
   const ledgerItems = transactions.map(t => {
-    currentRunning = currentRunning + t.increase - t.decrease
+    currentRunning = currentRunning + t.debit - t.credit
     return { ...t, balance: currentRunning }
   })
 
-  const totalSales = bills.reduce((sum, b) => sum + Number(b.total_with_vat || 0), 0)
-  const totalCollections = payments.reduce((sum, p) => sum + Number(p.amount || 0), 0)
-  const finalBalance = openingBalance + totalSales - totalCollections
+  const totalDebit = bills.reduce((sum, b) => sum + Number(b.total_with_vat || 0), 0)
+  const totalCredit = payments.reduce((sum, p) => sum + Number(p.amount || 0), 0)
+  const finalBalance = openingBalance + totalDebit - totalCredit
 
   const downloadPdf = () => {
     if (!selectedCustomer) return
     const doc = new jsPDF()
-    
-    doc.setFontSize(20)
-    doc.text('Customer Ledger Report', 14, 22)
-    doc.setFontSize(11)
-    doc.setTextColor(100)
-    doc.text(`Generated on: ${getCurrentBsDate()} ${getCurrentTime()}`, 14, 30)
-    
-    doc.setTextColor(0)
+
+    // Business Header
+    doc.setFont('times', 'bold')
+    doc.setFontSize(18)
+    doc.text(BUSINESS_NAME, 105, 20, { align: 'center' })
+
+    doc.setFont('times', 'normal')
+    doc.setFontSize(10)
+    doc.text(BUSINESS_ADDRESS, 105, 28, { align: 'center' })
+
+    // Horizontal line
+    doc.setDrawColor(0, 0, 0)
+    doc.setLineWidth(0.5)
+    doc.line(14, 34, 196, 34)
+
+    // Report title
     doc.setFontSize(14)
-    doc.text(selectedCustomer.name, 14, 45)
-    doc.setFontSize(11)
-    doc.text(`Code: ${selectedCustomer.customer_code}`, 14, 52)
-    doc.text(`Phone: ${selectedCustomer.phone || '—'}`, 14, 58)
-    
-    doc.setDrawColor(200)
-    doc.line(14, 65, 196, 65)
-    doc.text('Summary Statistics', 14, 75)
-    doc.text(`Opening Balance: NPR ${openingBalance.toLocaleString()}`, 14, 82)
-    doc.text(`Total Sales: NPR ${totalSales.toLocaleString()}`, 14, 88)
-    doc.text(`Total Collected: NPR ${totalCollections.toLocaleString()}`, 14, 94)
+    doc.setTextColor(60)
+    doc.text('Customer Ledger Report', 14, 45)
+    doc.setFontSize(10)
+    doc.text(`Generated: ${getCurrentBsDate()}`, 14, 52)
+
+    // Customer Info
+    doc.setTextColor(0)
+    doc.setFontSize(12)
+    doc.text(`Customer: ${selectedCustomer.name}`, 14, 64)
+    doc.setFontSize(10)
+    doc.text(`Code: ${selectedCustomer.customer_code}`, 14, 71)
+    if (selectedCustomer.phone) doc.text(`Phone: ${selectedCustomer.phone}`, 14, 77)
+
+    // Summary
+    doc.setDrawColor(180)
+    doc.line(14, 85, 196, 85)
+    doc.setFontSize(10)
+    doc.text('Summary', 14, 93)
+    doc.text(`Opening Balance: NPR ${openingBalance.toLocaleString('en-IN')}`, 14, 101)
+    doc.text(`Total Debit (Sales): NPR ${totalDebit.toLocaleString('en-IN')}`, 14, 107)
+    doc.text(`Total Credit (Collections): NPR ${totalCredit.toLocaleString('en-IN')}`, 14, 113)
     doc.setFont(undefined, 'bold')
-    doc.text(`Closing Balance (Net Receivable): NPR ${finalBalance.toLocaleString()}`, 14, 102)
+    doc.text(`Closing Balance: ${formatBalanceWithSuffix(finalBalance)}`, 14, 121)
     doc.setFont(undefined, 'normal')
-    
+
+    // Table - Order: Date(BS), Type, Debit, Credit, Balance
     const tableData = [
-      ['Date (BS)', 'Type', 'Reference', 'Sales (+)', 'Collections (-)', 'Balance'],
-      [selectedCustomer.opening_balance_date_bs || '—', 'OPENING', 'Forwarded', '—', '—', openingBalance.toLocaleString()],
+      ['Date (BS)', 'Type', 'Debit', 'Credit', 'Balance'],
+      [selectedCustomer.opening_balance_date_bs || '—', 'OPENING', '—', '—', formatBalanceWithSuffix(openingBalance)],
       ...ledgerItems.map(item => [
         item.date_bs,
         item.type.toUpperCase(),
-        item.ref,
-        item.increase > 0 ? item.increase.toLocaleString() : '—',
-        item.decrease > 0 ? item.decrease.toLocaleString() : '—',
-        item.balance.toLocaleString()
+        item.debit > 0 ? item.debit.toLocaleString('en-IN') : '—',
+        item.credit > 0 ? item.credit.toLocaleString('en-IN') : '—',
+        formatBalanceWithSuffix(item.balance)
       ])
     ]
 
     autoTable(doc, {
-      startY: 110,
+      startY: 129,
       head: [tableData[0]],
       body: tableData.slice(1),
-      theme: 'striped',
-      headStyles: { fillColor: [41, 128, 185], textColor: 255 },
-      styles: { fontSize: 9 },
+      theme: 'plain',
+      headStyles: {
+        fillColor: [80, 80, 80],
+        textColor: 255,
+        font: 'times',
+        fontStyle: 'bold'
+      },
+      styles: {
+        fontSize: 9,
+        font: 'times'
+      },
       columnStyles: {
+        0: { halign: 'left' },
+        1: { halign: 'center' },
+        2: { halign: 'right' },
         3: { halign: 'right' },
-        4: { halign: 'right' },
-        5: { halign: 'right', fontStyle: 'bold' }
-      }
+        4: { halign: 'right', fontStyle: 'bold' }
+      },
+      alternateRowStyles: { fillColor: [245, 245, 245] }
     })
 
     const timestamp = `${getCurrentBsDate().replace(/\//g, '-')}_${getCurrentTime().replace(/:/g, '-')}`
-    doc.save(`Ledger_Customer_${selectedCustomer.name.replace(/\s+/g, '_')}_${timestamp}.pdf`)
+    doc.save(`Customer_Ledger_${selectedCustomer.name.replace(/\s+/g, '_')}_${timestamp}.pdf`)
   }
 
   const downloadExcel = () => {
     if (!selectedCustomer) return
-    
+
     const infoData = [
+      [BUSINESS_NAME],
+      [BUSINESS_ADDRESS],
+      [],
       ['Customer Ledger Report'],
       [`Customer: ${selectedCustomer.name} (${selectedCustomer.customer_code})`],
       [`Generated on: ${getCurrentBsDate()} ${getCurrentTime()}`],
       [],
       ['SUMMARY'],
       ['Opening Balance', openingBalance],
-      ['Total Sales', totalSales],
-      ['Total Collections', totalCollections],
-      ['Net Receivable', finalBalance],
+      ['Total Debit (Sales)', totalDebit],
+      ['Total Credit (Collections)', totalCredit],
+      ['Closing Balance', finalBalance],
       [],
-      ['TRANSACTION DETAILS'],
-      ['Date (BS)', 'Date (AD)', 'Type', 'Reference', 'Sales (+)', 'Collections (-)', 'Running Balance']
+      ['Date (BS)', 'Type', 'Debit', 'Credit', 'Balance']
     ]
 
     const transactionData = [
-      [selectedCustomer.opening_balance_date_bs || '—', selectedCustomer.opening_balance_date_ad || '—', 'OPENING', 'Opening Balance Forward', 0, 0, openingBalance],
+      [selectedCustomer.opening_balance_date_bs || '—', 'OPENING', 0, 0, openingBalance],
       ...ledgerItems.map(item => [
         item.date_bs,
-        item.date_ad,
         item.type.toUpperCase(),
-        item.ref,
-        item.increase,
-        item.decrease,
+        item.debit,
+        item.credit,
         item.balance
       ])
     ]
@@ -225,7 +263,11 @@ function CustomerLedgerContent() {
     const ws = XLSX.utils.aoa_to_sheet([...infoData, ...transactionData])
 
     ws['!cols'] = [
-      { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 30 }, { wch: 15 }, { wch: 15 }, { wch: 18 }
+      { wch: 14 },
+      { wch: 12 },
+      { wch: 15 },
+      { wch: 15 },
+      { wch: 18 }
     ]
 
     const range = XLSX.utils.decode_range(ws['!ref'] || 'A1')
@@ -239,15 +281,21 @@ function CustomerLedgerContent() {
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Ledger')
     const timestamp = `${getCurrentBsDate().replace(/\//g, '-')}_${getCurrentTime().replace(/:/g, '-')}`
-    XLSX.writeFile(wb, `Ledger_Customer_${selectedCustomer.name.replace(/\s+/g, '_')}_${timestamp}.xlsx`)
+    XLSX.writeFile(wb, `Customer_Ledger_${selectedCustomer.name.replace(/\s+/g, '_')}_${timestamp}.xlsx`)
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" style={{ fontFamily: "'Times New Roman', Times, serif" }}>
+      {/* Business Header */}
+      <div className="text-center border-b-2 border-gray-800 pb-4 mb-4">
+        <h1 className="text-2xl font-bold tracking-wide">{BUSINESS_NAME}</h1>
+        <p className="text-sm text-gray-600 mt-1">{BUSINESS_ADDRESS}</p>
+      </div>
+
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Customer Ledger</h1>
-          <p className="text-muted-foreground">Detailed financial history for individual customers</p>
+          <h2 className="text-xl font-bold">Customer Ledger</h2>
+          <p className="text-gray-600 text-sm">Transaction history and balance</p>
         </div>
       </div>
 
@@ -267,8 +315,8 @@ function CustomerLedgerContent() {
       </div>
 
       {!selectedCustomerId ? (
-        <Card className="bg-muted/20 border-dashed">
-          <CardContent className="py-20 text-center text-muted-foreground">
+        <Card className="bg-gray-50 border-dashed">
+          <CardContent className="py-20 text-center text-gray-500">
             Select a customer above to generate the ledger report
           </CardContent>
         </Card>
@@ -279,49 +327,43 @@ function CustomerLedgerContent() {
       ) : (
         <>
           <div className="grid gap-4 md:grid-cols-4">
-            <Card className="bg-muted/30">
+            <Card className="bg-gray-50">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium">Opening Balance</CardTitle>
               </CardHeader>
               <CardContent>
                 <p className="text-lg font-semibold">{formatNPR(openingBalance)}</p>
                 {selectedCustomer?.opening_balance_date_bs && (
-                  <p className="text-xs text-muted-foreground mt-1">As of {selectedCustomer.opening_balance_date_bs}</p>
+                  <p className="text-xs text-gray-500 mt-1">As of {selectedCustomer.opening_balance_date_bs}</p>
                 )}
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Total Sales</CardTitle>
+                <CardTitle className="text-sm font-medium">Total Debit (Sales)</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="flex items-center gap-2">
-                  <TrendingUp className="h-4 w-4 text-primary" />
-                  <p className="text-lg font-semibold text-primary">{formatNPR(totalSales)}</p>
-                </div>
+                <p className="text-lg font-semibold text-gray-800">{formatNPR(totalDebit)}</p>
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Total Collected</CardTitle>
+                <CardTitle className="text-sm font-medium">Total Credit (Collections)</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="flex items-center gap-2">
-                  <TrendingDown className="h-4 w-4 text-green-600" />
-                  <p className="text-lg font-semibold text-green-600">{formatNPR(totalCollections)}</p>
-                </div>
+                <p className="text-lg font-semibold text-gray-800">{formatNPR(totalCredit)}</p>
               </CardContent>
             </Card>
-            <Card className={finalBalance > 0 ? 'bg-primary/5 border-primary' : 'bg-green-50 border-green-200'}>
+            <Card className={finalBalance > 0 ? 'bg-gray-100 border-gray-400' : 'bg-green-50 border-green-300'}>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-foreground">Net Receivable</CardTitle>
+                <CardTitle className="text-sm font-medium text-gray-800">Closing Balance</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className={`text-xl font-bold ${finalBalance > 0 ? 'text-primary' : 'text-green-700'}`}>
-                  {formatNPR(finalBalance)}
+                <p className="text-xl font-bold text-gray-800">
+                  {formatBalanceWithSuffix(finalBalance)}
                 </p>
-                <p className="text-[10px] uppercase font-bold mt-1 text-muted-foreground">
-                  {finalBalance > 0 ? 'Due from Customer' : 'Advance / Cleared'}
+                <p className="text-xs font-medium uppercase mt-1 text-gray-600">
+                  {finalBalance > 0 ? 'Receivable' : 'Advance'}
                 </p>
               </CardContent>
             </Card>
@@ -329,7 +371,7 @@ function CustomerLedgerContent() {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Customer Ledger History</CardTitle>
+              <CardTitle className="text-gray-800">Transaction Ledger</CardTitle>
               <div className="flex items-center gap-2">
                 <Button variant="outline" size="sm" onClick={downloadExcel} className="hidden sm:flex">
                   <TableIcon className="mr-2 h-4 w-4" />
@@ -344,41 +386,38 @@ function CustomerLedgerContent() {
             <CardContent>
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead>Date (BS)</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Reference / Note</TableHead>
-                    <TableHead className="text-right">Sales (+)</TableHead>
-                    <TableHead className="text-right">Collections (-)</TableHead>
-                    <TableHead className="text-right">Running Balance</TableHead>
+                  <TableRow className="bg-gray-100 hover:bg-gray-100">
+                    <TableHead className="font-semibold text-gray-800">Date (BS)</TableHead>
+                    <TableHead className="font-semibold text-gray-800">Type</TableHead>
+                    <TableHead className="text-right font-semibold text-gray-800">Debit</TableHead>
+                    <TableHead className="text-right font-semibold text-gray-800">Credit</TableHead>
+                    <TableHead className="text-right font-semibold text-gray-800">Balance</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  <TableRow className="bg-muted/30 italic">
-                    <TableCell colSpan={3}>Opening Balance Forward</TableCell>
+                  <TableRow className="bg-gray-50 italic">
+                    <TableCell>Opening Balance</TableCell>
+                    <TableCell>—</TableCell>
                     <TableCell className="text-right">—</TableCell>
                     <TableCell className="text-right">—</TableCell>
-                    <TableCell className="text-right font-bold">{formatNPR(openingBalance)}</TableCell>
+                    <TableCell className="text-right font-bold">{formatBalanceWithSuffix(openingBalance)}</TableCell>
                   </TableRow>
                   {ledgerItems.map((item) => (
                     <TableRow key={`${item.type}-${item.id}`}>
                       <TableCell className="whitespace-nowrap">{item.date_bs}</TableCell>
                       <TableCell>
-                        <Badge variant={item.type === 'sale' ? 'outline' : 'secondary'} className="capitalize">
+                        <Badge variant="outline" className="capitalize border-gray-400 text-gray-700">
                           {item.type}
                         </Badge>
                       </TableCell>
-                      <TableCell className="max-w-[200px] truncate text-muted-foreground text-sm font-medium">
-                        {item.ref}
+                      <TableCell className="text-right font-medium">
+                        {item.debit > 0 ? formatNPR(item.debit) : '—'}
                       </TableCell>
                       <TableCell className="text-right font-medium">
-                        {item.increase > 0 ? formatNPR(item.increase) : '—'}
+                        {item.credit > 0 ? formatNPR(item.credit) : '—'}
                       </TableCell>
-                      <TableCell className="text-right font-medium text-green-600">
-                        {item.decrease > 0 ? formatNPR(item.decrease) : '—'}
-                      </TableCell>
-                      <TableCell className={`text-right font-bold ${item.balance > 0 ? 'text-primary' : 'text-green-700'}`}>
-                        {formatNPR(item.balance)}
+                      <TableCell className="text-right font-bold text-gray-800">
+                        {formatBalanceWithSuffix(item.balance)}
                       </TableCell>
                     </TableRow>
                   ))}

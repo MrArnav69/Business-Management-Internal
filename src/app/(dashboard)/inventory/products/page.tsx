@@ -319,6 +319,7 @@ export default function ProductsPage() {
               <TableHead>Code</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Category</TableHead>
+              <TableHead className="text-center">Unit</TableHead>
               <TableHead className="text-right">Qty</TableHead>
               <TableHead className="text-right">Buy Rate</TableHead>
               <TableHead className="text-right">Sell Rate</TableHead>
@@ -329,13 +330,13 @@ export default function ProductsPage() {
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-8">
+                <TableCell colSpan={9} className="text-center py-8">
                   <Loader2 className="mx-auto h-6 w-6 animate-spin" />
                 </TableCell>
               </TableRow>
             ) : filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                   No products found
                 </TableCell>
               </TableRow>
@@ -345,6 +346,11 @@ export default function ProductsPage() {
                   <TableCell className="font-mono text-sm">{product.product_code}</TableCell>
                   <TableCell className="font-medium">{product.name}</TableCell>
                   <TableCell>{product.category_name}</TableCell>
+                  <TableCell className="text-center">
+                    <Badge variant="outline" className="font-mono">
+                      {product.unit}
+                    </Badge>
+                  </TableCell>
                   <TableCell className="text-right">
                     <span
                       className={
